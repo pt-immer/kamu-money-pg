@@ -1,0 +1,18 @@
+-- sum_totals_a_pinned_column
+10.00
+-- sum_of_no_rows_is_null
+empty_sum_is_null=true
+-- every_pinned_type_has_its_own_sum
+sum_aggregates=178
+-- the_sum_aggregate_is_plan_independent_across_a_domain_edge_transient
+999999999999999999.999999999999999999
+999999999999999999.999999999999999999
+-- the_sum_aggregate_combines_an_empty_partial
+empty_partial_is_identity=true
+-- the_sum_aggregate_rejects_a_forged_transition_state
+ERROR:  sum(kmoney_usd): transition state must be exactly 32 bytes, got 5
+-- the_sum_aggregate_rejects_a_total_that_leaves_the_domain
+ERROR:  sum(kmoney_usd): 1000000000000000000000000000000000000 canonical units is outside the supported range -999999999999999999999999999999999999..=999999999999999999999999999999999999
+-- the_sum_aggregate_reports_a_total_too_wide_for_i128
+ERROR:  sum(kmoney_usd): 170999999999999999999999999999999999829 canonical units is outside the supported range -999999999999999999999999999999999999..=999999999999999999999999999999999999
+== CASE COMPLETE: 04-sum ==

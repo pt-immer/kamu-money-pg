@@ -1,0 +1,17 @@
+-- a_mixed_column_equality_is_currency_aware_and_never_raises
+cross_currency_eq=false usd_ones=2
+-- a_mixed_column_cannot_be_ordered
+ERROR:  operator does not exist: kmoney_mixed < kmoney_mixed at character 33
+-- addition_on_the_mixed_type_does_not_exist_either
+ERROR:  operator does not exist: kmoney_mixed + kmoney_mixed at character 34
+-- a_mixed_column_stores_several_currencies_side_by_side
+IDR 1.00
+USD 1.00
+USD 1.00
+-- the_conversion_out_of_mixed_proves_the_currency
+2.50
+-- the_conversion_out_of_mixed_refuses_the_wrong_currency
+ERROR:  kmoney_usd: expected USD, got IDR
+-- sum_on_a_mixed_column_fails_at_plan_time
+ERROR:  function sum(kmoney_mixed) does not exist at character 8
+== CASE COMPLETE: 05-mixed ==

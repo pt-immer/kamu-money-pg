@@ -1,0 +1,15 @@
+-- allocation_conserves_the_pinned_total
+10.00
+-- allocation_honours_weights_and_still_conserves
+0.06,0.02,0.02
+0.000000000000000002,0.000000000000000002,0.000000000000000004
+-- a_negative_amount_allocates_by_the_same_scheme
+-0.06,-0.02,-0.02
+-0.000000000000000002,-0.000000000000000002,-0.000000000000000004
+-- allocation_never_pays_a_zero_weight_recipient
+0.015,0.00,0.015
+-- allocation_refuses_a_null_weight
+ERROR:  kmoney_usd_allocate: NULL weight -- a share of nothing is not a share of zero
+-- allocation_refuses_weights_that_sum_to_zero
+ERROR:  kmoney_usd_allocate: weights sum to zero -- the amount would have nowhere to go
+== CASE COMPLETE: 07-allocate ==

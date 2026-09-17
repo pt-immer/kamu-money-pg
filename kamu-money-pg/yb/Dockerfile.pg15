@@ -1,0 +1,97 @@
+# syntax=docker/dockerfile:1
+# STOCK PostgreSQL 15 reference for the byte-exact A/B against YugabyteDB.
+#
+# Built FROM the SAME YB image as kamu-money-pg/yb/Dockerfile so glibc/OS match exactly;
+# the ONLY difference is the PG headers -- this compiles UPSTREAM PG15 from source via
+# `cargo pgrx init --pg15 download`, with NO YB shim and NO --cfg yb. It then runs
+# kamu-money-pg/yb/abi_battery.sql on that stock PG15 and exports the output, so `just yb-ab`
+# can diff it against the YB run -- a diff attributable purely to the YB fork's ABI.
+#
+# Built by `just pg yb-ab`, which supplies both Docker contexts.
+ARG YB_IMAGE=yugabytedb/yugabyte:2025.2.5.1-b1
+FROM ${YB_IMAGE} AS build
+USER root
+
+# Build deps (UBI/CentOS-family). `perl` is required to build PostgreSQL from source;
+# libclang for pgrx's bindgen.
+RUN (command -v dnf >/dev/null 2>&1 && \
+     dnf install -y curl gcc gcc-c++ make clang clang-devel llvm-libs perl \
+       bison flex readline-devel zlib-devel libicu-devel openssl-devel ca-certificates \
+     || yum install -y curl gcc gcc-c++ make clang clang-devel llvm-libs perl \
+       bison flex readline-devel zlib-devel libicu-devel openssl-devel ca-certificates)
+
+# Optional TLS-inspecting-proxy trust anchors (same rule as kamu-money-pg/yb/Dockerfile).
+COPY kamu-money-pg/ca-certs/ /etc/pki/ca-trust/source/anchors/
+RUN update-ca-trust extract || true
+ENV SSL_CERT_FILE=/etc/pki/tls/certs/ca-bundle.crt \
+    CARGO_HTTP_CAINFO=/etc/pki/tls/certs/ca-bundle.crt
+
+# initdb/postgres REFUSE to run as root, and this reference RUNS a server, so everything
+# below is unprivileged -- exactly like kamu-money-pg/Dockerfile's `pgrx` user.
+RUN useradd -m -s /bin/bash pgrx
+USER pgrx
+ENV PATH=/home/pgrx/.cargo/bin:$PATH CARGO_HOME=/home/pgrx/.cargo USER=pgrx
+
+RUN curl --proto '=https' --tlsv1.2 -sSfo /tmp/rustup.sh https://sh.rustup.rs \
+ && sh /tmp/rustup.sh -y --default-toolchain 1.96.0
+RUN cargo install cargo-pgrx --version 0.19.2 --locked
+ENV RUST_BACKTRACE=1
+
+# Upstream PG15 built from source -- NO YB pg_config, NO shim, NO --cfg yb.
+RUN cargo pgrx init --pg15 download
+
+WORKDIR /work
+USER root
+COPY --chown=pgrx . .
+ARG KMONEY_USE_LOCAL_CORE=1
+COPY --from=kamu-money-core --chown=pgrx:pgrx . /opt/kamu-money-core
+USER pgrx
+# The A/B is only a claim about the YugabyteDB fork's ABI if BOTH sides compile the same
+# kamu-money-core. A patch that is passed and then ignored would make this reference a different
+# build, and the diff would attribute that difference to YugabyteDB.
+RUN case "${KMONEY_USE_LOCAL_CORE}" in \
+      0) echo "kamu-money-core: resolving from crates.io"; WANT=registry ;; \
+      1) printf '\n[patch.crates-io]\nkamu-money-core = { path = "/opt/kamu-money-core" }\n' \
+           >> /work/.cargo/config.toml; WANT=local ;; \
+      *) echo "KMONEY_USE_LOCAL_CORE must be 0 or 1" >&2; exit 2 ;; \
+    esac; \
+    bash scripts/assert-core-resolution.sh "$WANT"
+ENV KMONEY_USE_LOCAL_CORE=${KMONEY_USE_LOCAL_CORE}
+# Same PGRX_HOME reconciliation as the other Dockerfiles: the forced relative /work/.pgrx
+# must resolve to the real home pgrx init wrote.
+RUN ln -sfn /home/pgrx/.pgrx /work/.pgrx
+
+# Install kamu-money-pg into that stock PG15, initdb a throwaway cluster on loopback, run the
+# SAME battery, capture output. ON_ERROR_STOP=0: several probes deliberately provoke errors
+# whose TEXT is part of the A/B.
+#
+# AND the ported case suite (tests/pg_regress), against the same server. That is what makes the
+# suite's YugabyteDB run mean something: both engines are checked against ONE hand-authored golden
+# set, so a failure on YB is a divergence rather than an unfalsifiable "the port must be wrong".
+# It fails the build if any case differs -- which is deliberate, because a stock-PG15 reference
+# that no longer matches its own goldens cannot referee anything.
+RUN set -eux; \
+    CFG="$(ls /home/pgrx/.pgrx/15.*/pgrx-install/bin/pg_config)"; \
+    BIN="$(dirname "$CFG")"; \
+    cargo pgrx install -p kamu-money-pg --no-default-features --features pg15 -c "$CFG"; \
+    mkdir -p /tmp/out; \
+    "$BIN/initdb" -U postgres -D /tmp/pg15data >/dev/null; \
+    "$BIN/pg_ctl" -D /tmp/pg15data -o "-p 5432 -k /tmp -c listen_addresses=127.0.0.1" -w start; \
+    set +e; \
+    "$BIN/psql" -h 127.0.0.1 -p 5432 -U postgres -X -v ON_ERROR_STOP=0 \
+        -f kamu-money-pg/yb/abi_battery.sql > /tmp/out/out-pg15.txt 2>&1; \
+    CLIENT_STATUS=$?; \
+    set -e; \
+    chmod +x kamu-money-pg/tests/pg_regress/run-suite.sh; \
+    printf '#!/bin/sh\nexec %s/psql -h 127.0.0.1 -p 5432 -U postgres "$@" 2>&1\n' "$BIN" > /tmp/pgclient; \
+    chmod +x /tmp/pgclient; \
+    ./kamu-money-pg/tests/pg_regress/run-suite.sh \
+        --client /tmp/pgclient \
+        --server-exec bash \
+        --label pg15 --outdir /tmp/out/regress-pg15; \
+    "$BIN/pg_ctl" -D /tmp/pg15data stop -m fast >/dev/null; \
+    cat /tmp/out/out-pg15.txt; \
+    ./kamu-money-pg/yb/assert-battery.sh /tmp/out/out-pg15.txt pg15 "$CLIENT_STATUS"
+
+FROM scratch AS ref
+COPY --from=build /tmp/out/ /

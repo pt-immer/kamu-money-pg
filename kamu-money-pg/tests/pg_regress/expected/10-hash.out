@@ -1,0 +1,8 @@
+-- the_persisted_hash_values_are_pinned_not_merely_consistent
+702888007
+-1388235877
+-129968833
+1671845669
+-- a_pinned_value_hashes_as_the_erased_one_does
+pinned_hash=mixed_hash=true
+== CASE COMPLETE: 10-hash ==

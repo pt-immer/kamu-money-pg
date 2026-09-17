@@ -1,0 +1,9 @@
+-- addition_is_exact_at_one_unit_of_the_eighteenth_decimal
+0.000000000000000003
+-- addition_past_the_domain_top_is_refused
+ERROR:  kmoney_idr: the result of + is outside the domain |units| <= 10^36 - 1
+-- pinned_arithmetic_stays_within_the_currency
+4.00
+-- cross_currency_arithmetic_has_no_operator
+ERROR:  operator does not exist: kmoney_usd + kmoney_idr at character 28
+== CASE COMPLETE: 03-arith ==

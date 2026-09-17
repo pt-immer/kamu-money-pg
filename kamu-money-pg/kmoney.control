@@ -1,0 +1,9 @@
+comment = 'kmoney: exact fixed-point money as native per-currency types, i128 units at scale 18'
+default_version = '@CARGO_VERSION@'
+module_pathname = 'kmoney'
+relocatable = false
+# The extension loads a shared library, which PostgreSQL only lets a superuser do.
+# `trusted = true` would let a mere database owner install it, and is reserved for extensions
+# implemented purely in SQL -- this one is not.
+superuser = true
+trusted = false

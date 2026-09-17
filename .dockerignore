@@ -1,0 +1,8 @@
+# Host-only build state. Copying either path into an image makes the build
+# machine affect pgrx resolution; `target` also bloats the context by gigabytes.
+.pgrx
+target
+
+# Container-suite output is regenerated and can contain database data and
+# extracted extension artifacts.
+kamu-money-pg/yb/out

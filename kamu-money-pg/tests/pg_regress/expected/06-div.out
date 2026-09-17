@@ -1,0 +1,16 @@
+-- division_conserves_the_pinned_amount
+3.333333333333333333 | 0.000000000000000001
+rebuilt=true
+-- the_division_identity_holds_for_every_rounding_mode
+half_even=true
+half_away_from_zero=true
+half_toward_zero=true
+toward_zero=true
+away_from_zero=true
+floor=true
+ceil=true
+-- the_residue_is_negative_under_round_up_modes
+3.333333333333333334 | -0.000000000000000002
+-- division_refuses_an_unknown_rounding_mode
+ERROR:  kmoney_usd_div: "bankers" is not a rounding mode; expected one of: half_even, half_away_from_zero, half_toward_zero, toward_zero, away_from_zero, floor, ceil
+== CASE COMPLETE: 06-div ==

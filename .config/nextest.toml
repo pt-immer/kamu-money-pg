@@ -1,0 +1,24 @@
+# cargo-nextest configuration for the PostgreSQL extension lane.
+#
+# WHY THIS EXISTS SEPARATELY. The lane is its own Cargo workspace, and nextest
+# reads `.config/nextest.toml` relative to the WORKSPACE ROOT — so the repository
+# root's config does not reach here. CI sets `NEXTEST_PROFILE: ci` for every job in
+# the workflow, and without a `ci` profile defined here nextest refuses outright:
+#
+#     error: profile `ci` not found (known profiles: default, default-miri)
+#
+# That is the right failure — a profile that silently fell back to `default` would
+# quietly turn fail-fast back on in CI — but it means the lane must define its own.
+
+[profile.ci]
+# CI wants the complete picture from one run rather than the first failure, so a
+# single push surfaces every broken test instead of one per round-trip.
+fail-fast = false
+# Repeat failure output at the end of the log so a failure is readable without
+# scrolling back through the run.
+failure-output = "immediate-final"
+
+# NO RETRIES, here or in `default`, matching the repository root. A test retried
+# into green is a silent skip wearing a passing badge, and the suites this lane
+# runs — conservation under concurrency, cross-node byte-identity — are exactly
+# the kind whose flakiness would be the finding.

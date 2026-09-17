@@ -1,0 +1,33 @@
+# Dependency policy for the excluded PostgreSQL extension workspace.
+#
+# This file is intentionally separate from the repository-root policy. The lane
+# resolves pgrx from one reviewed public fork; published crates must continue to
+# reject every Git dependency.
+
+[graph]
+all-features = true
+
+[advisories]
+ignore = [
+  # pgrx 0.19.2 uses serde_cbor only for its extension schema transport.
+  # serde_cbor is unmaintained, but the advisory has no safe upgrade and pgrx
+  # exposes no replacement hook. Remove this ignore when pgrx drops it.
+  "RUSTSEC-2021-0127",
+]
+version = 2
+yanked = "deny"
+
+[licenses]
+allow = ["Apache-2.0 WITH LLVM-exception", "Apache-2.0", "BSD-3-Clause", "ISC", "MIT", "Unicode-3.0", "Zlib"]
+confidence-threshold = 0.8
+version = 2
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+allow-git = ["https://github.com/pt-immer/pgrx-yugabytedb"]
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+unknown-git = "deny"
+unknown-registry = "deny"

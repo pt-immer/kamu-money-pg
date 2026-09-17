@@ -1,0 +1,13 @@
+-- a_wrong_tag_refusal_is_invalid_text_representation
+ERROR:  22P02
+-- an_out_of_domain_literal_refusal_is_numeric_value_out_of_range
+ERROR:  22003
+-- a_forged_sum_state_refusal_is_invalid_binary_representation
+ERROR:  22P03
+-- a_zero_parts_division_refusal_is_division_by_zero
+ERROR:  22012
+-- an_invalid_weights_refusal_is_invalid_parameter_value
+ERROR:  22023
+-- a_cross_currency_expression_refusal_is_undefined_function
+ERROR:  42883
+== CASE COMPLETE: 12-errors ==

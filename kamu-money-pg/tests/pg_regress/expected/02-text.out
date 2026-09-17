@@ -1,0 +1,24 @@
+-- the_text_form_matches_money_core
+USD 10.50
+USD 10.50
+JPY 10.5
+KWD 10.500
+USD -0.000000000000000001
+-- kmoney_refuses_what_numeric_silently_rounds
+ERROR:  kmoney_usd: 19 fractional digits exceeds the supported scale of 18, in "0.0000000000000000004" at character 8
+-- the_domain_top_round_trips
+999999999999999999.999999999999999999
+-- one_unit_past_the_domain_is_refused
+ERROR:  kmoney_idr: 1000000000000000000000000000000000000 canonical units is outside the supported range -999999999999999999999999999999999999..=999999999999999999999999999999999999, in "1000000000000000000" at character 8
+-- an_unknown_currency_is_refused_at_the_boundary
+ERROR:  kmoney_mixed: invalid money literal, in "ZWL 1.00" at character 8
+-- the_native_type_and_the_text_storage_agree
+render_disagreements=0
+reparse_mismatches=0
+-- a_pinned_type_renders_bare
+10.50
+-- a_pinned_type_accepts_its_own_tag
+10.50
+-- a_pinned_type_refuses_another_currencys_tag
+ERROR:  kmoney_usd: expected USD, got IDR at character 8
+== CASE COMPLETE: 02-text ==

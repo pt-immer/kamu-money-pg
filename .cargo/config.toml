@@ -1,0 +1,26 @@
+# PGRX_HOME lives INSIDE the repository, on every machine, without anyone opting in.
+#
+# pgrx defaults it to `~/.pgrx`, which makes "can you build kamu-money-pg?" a property of the
+# developer's home directory rather than of the checkout. That cost four consecutive failed
+# container builds in one session: every one was a mechanical error -- a wrong module path, a
+# macro used above its definition -- that `cargo check` catches in seconds, but `kamu-money-pg`
+# could not be checked locally at all, so each was found by a two-minute container round trip.
+#
+# `relative = true` resolves against this file's directory, so it is correct from any working
+# directory and identical on every machine. `force = true` because the point is that a stray
+# `~/.pgrx` on someone's box must NOT silently take precedence -- a build that depends on
+# which developer ran it is the thing this removes.
+#
+# Populate it with:
+#     just pgrx-init
+#
+# THIS MAKES THE HOST PostgreSQL LOAD-BEARING. `.pgrx/config.toml` names /usr/bin/pg_config,
+# owned by `postgresql-libs`. Removing that package was on the housekeeping list as harmless
+# cleanup right up until this file existed; it would now break `just check-pg` and put
+# kamu-money-pg back to container-only. If it is ever removed, re-run `just pgrx-init` against
+# another pg_config -- do not simply delete `.pgrx/` and assume the workspace still builds.
+#
+# The directory is gitignored: `config.toml` names the system pg_config, and `data-*/` are
+# PostgreSQL data directories that pgrx creates for test instances.
+[env]
+PGRX_HOME = { value = ".pgrx", relative = true, force = true }
