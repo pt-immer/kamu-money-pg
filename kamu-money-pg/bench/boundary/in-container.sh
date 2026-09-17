@@ -20,12 +20,12 @@ gcc -O2 -fPIC -shared \
     -I"$("$BIN/pg_config" --includedir-server)" \
     -o /tmp/c_noop.so /tmp/c_noop.c
 
-# `cargo pgrx install` defaults to debug, which is invalid for a performance comparison.
+# `./scripts/pgrx.sh install` defaults to debug, which is invalid for a performance comparison.
 #
 # `boundary-probe` is what puts rs_noop and rs_noop_kmoney into the extension. probe.sql refuses
 # to print a table if they are missing, so forgetting this flag fails loudly rather than
 # measuring four rows and calling it a boundary.
-cargo pgrx install --release --no-default-features --features "pg${PG},boundary-probe" \
+./scripts/pgrx.sh install --release --no-default-features --features "pg${PG},boundary-probe" \
     --pg-config "$BIN/pg_config" >&2
 
 SO="$("$BIN"/pg_config --pkglibdir)/kmoney.so"

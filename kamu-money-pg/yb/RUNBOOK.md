@@ -50,15 +50,15 @@ override proves the evaluation path is active.
 
 ```bash
 NEW='yugabytedb/yugabyte:<new-tag>'
-RESOLVER='extensions/money-pg/kamu-money-pg/yb/yb-image.sh'
+RESOLVER='kamu-money-pg/yb/yb-image.sh'
 
 # Expected to refuse. Record the immutable digest printed in the diagnostic.
 YB_PULL=1 "$RESOLVER" "$NEW"
 
 # For a new tag:
-YB_ALLOW_UNPINNED=1 just pg yb-build "$NEW"
-YB_ALLOW_UNPINNED=1 just pg gate-pg-release "$NEW"
-YB_ALLOW_UNPINNED=1 just pg test-yb-deployment "$NEW"
+YB_ALLOW_UNPINNED=1 just yb-build "$NEW"
+YB_ALLOW_UNPINNED=1 just gate-pg-release "$NEW"
+YB_ALLOW_UNPINNED=1 just test-yb-deployment "$NEW"
 
 # For a recorded tag whose digest moved, use YB_ALLOW_DRIFT=1 instead.
 ```
@@ -66,15 +66,14 @@ YB_ALLOW_UNPINNED=1 just pg test-yb-deployment "$NEW"
 The release gate:
 
 1. resolves one immutable base image;
-2. disables the local `kamu-money-core` Cargo patch;
+2. verifies the locked crates.io `kamu-money-core` resolution;
 3. runs the offline and PostgreSQL 15–18 gates;
 4. builds one node image and extracts the artifact from it;
 5. compares YugabyteDB with stock PostgreSQL 15, byte for byte;
 6. runs the portable cases against that node image;
 7. refuses benchmark-only symbols in the shipped artifact.
 
-It proves the extension is correct on YugabyteDB, and stops there. `just pg
-test-yb-deployment` covers three-node behaviour, a read replica, concurrent
+It proves the extension is correct on YugabyteDB, and stops there. `just test-yb-deployment` covers three-node behaviour, a read replica, concurrent
 transfers and same-version dump/restore — those describe how a cluster carries
 the extension, which is why adopting an image runs both.
 
@@ -84,8 +83,8 @@ If the gate passes:
 2. rerun without an override:
 
    ```bash
-   YB_PULL=1 just pg gate-pg-release "$NEW"
-   YB_PULL=1 just pg test-yb-deployment "$NEW"
+   YB_PULL=1 just gate-pg-release "$NEW"
+   YB_PULL=1 just test-yb-deployment "$NEW"
    ```
 
 3. update this runbook only if the support condition or procedure changed;
@@ -116,9 +115,9 @@ times three.
 Then update this repository:
 
 1. change both `[patch.crates-io]` entries in
-   `extensions/money-pg/Cargo.toml`;
+   `Cargo.toml`;
 2. change pgrx and pgrx-test requirements in
-   `extensions/money-pg/kamu-money-pg/Cargo.toml`;
+   `kamu-money-pg/Cargo.toml`;
 3. update every Docker `cargo-pgrx` pin and the `.config/dev-tools.json` entry. The
    workflow needs no edit: it indexes that entry rather than restating the version, and
    writing a literal back into it now fails the gate;
@@ -137,15 +136,15 @@ Then update this repository:
 6. run:
 
    ```bash
-   just pg setup
-   just pg doctor
-   just gate-all
+   just setup
+   just doctor
+   just gate
    ```
 
 `cargo-pgrx` must exactly match the pgrx dependency version.
 
 For an unpushed fork revision, a local checkout may temporarily live at
-`extensions/money-pg/vendor/pgrx-yugabytedb`; the lane excludes `vendor` from
+`vendor/pgrx-yugabytedb`; the lane excludes `vendor` from
 workspace discovery. Never commit a path patch as the release configuration.
 
 ## Diagnose a failure
@@ -158,16 +157,16 @@ workspace discovery. Never commit a path patch as the release configuration.
 | Compile error in `pgrx` or `pgrx-pg-sys` | The fork no longer applies to the chosen pgrx/YB combination. Update the fork; do not patch generated source in a container. |
 | `INCOHERENT TRIPLET` or `MANIFEST MISMATCH` | Shared object, control file, and SQL came from different builds. Delete that run's private output and rebuild as one artifact. |
 | `could not access file "$libdir/kmoney"` on one node | That node lacks the extension library. Roll the same image to every tserver, including read replicas. |
-| Stock PG15 and YugabyteDB fail the same case | Extension or portable-case defect. Start with `just pg test-pg 15`. |
+| Stock PG15 and YugabyteDB fail the same case | Extension or portable-case defect. Start with `just test-pg 15`. |
 | Stock PG15 passes and YugabyteDB fails | YugabyteDB divergence. Use the named case and golden diff to isolate the contract. |
 
 Useful diagnostics:
 
 ```bash
-just pg yb-pin-check
-just pg yb-image-selftest
-just pg yb-native
-just pg test-yb-regress
+just yb-pin-check
+just yb-image-selftest
+just yb-native
+just test-yb-regress
 docker ps -a --filter 'label=kamu-money-pg.revision'
 ```
 
@@ -210,7 +209,7 @@ registry, and deploys by registry digest.
 
 The database order is mandatory:
 
-1. Build and pass `just pg gate-pg-release` against the exact base digest.
+1. Build and pass `just gate-pg-release` against the exact base digest.
 2. Publish the consumer-owned node image and record its immutable digest.
 3. Roll that image to every YSQL tserver and read replica.
 4. Confirm every node is on the intended digest.
@@ -264,7 +263,7 @@ connection recycle, and smoke tests are complete.
 
 ### Restore
 
-`just pg test-yb-restore` proves same-version dump/restore into a clean cluster.
+`just test-yb-restore` proves same-version dump/restore into a clean cluster.
 The target must already run an image containing `kmoney`; PostgreSQL dumps
 `CREATE EXTENSION`, not the extension's member objects or shared library.
 

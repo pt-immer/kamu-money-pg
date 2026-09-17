@@ -6,7 +6,7 @@
 #     cargo pgrx init --pg18 $(which pg_config)
 [package]
 name = "kamu-money-pg"
-version = "0.2.0"
+version = "0.2.1"
 description = "PostgreSQL extension providing kmoney: one native fixed-size money type per ISO 4217 currency."
 # Package identity and `publish = false` are inherited from the lane root.
 authors.workspace = true
@@ -45,8 +45,7 @@ pgrx = "=0.19.2"
 # form comes from here, so the database and the Rust program cannot disagree about what a
 # stored value means.
 #
-# Recipes inject a local path patch without rewriting this plain registry
-# requirement. Until 0.1.0 is published, bare Cargo resolution fails explicitly.
+# Every build uses the registry version selected by Cargo.lock.
 kamu-money-core = "0.2"
 tempfile = { version = "3", optional = true }
 

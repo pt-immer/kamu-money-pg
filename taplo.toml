@@ -1,0 +1,12 @@
+# TOML formatting for kamu-money-pg (taplo).
+# Conservative on purpose: preserve the hand-curated key order and grouping in
+# Cargo.toml — taplo normalizes whitespace/indentation but never reorders.
+include = ["**/*.toml"]
+exclude = ["target/**", ".pgrx/**", "kamu-money-pg/yb/out/**", "node_modules/**", ".tools/**"]
+
+[formatting]
+align_entries = false
+reorder_keys = false
+reorder_arrays = false
+indent_string = "  "
+column_width = 110

@@ -15,14 +15,14 @@ fn gates_compose_every_required_check() {
         offline,
         // `doc-gate-selftest` rather than `doc-pg`: it runs that recipe against a probed tree and
         // then against a clean one, so composing both would be a second full rustdoc pass.
-        ["fmt-check", "lint", "deny", "doc-gate-selftest", "test-hygiene", "miri-payload"],
+        ["lint-all", "lint", "deny", "doc-gate-selftest", "test-hygiene", "miri-payload"],
         "gate-offline no longer composes exactly the checks the lane gate promises"
     );
 
     // WHICH recipes CI must reach is the lane's own claim, so it is asserted here. The match is
     // on a `run:` VALUE, parsed rather than searched: a bare substring is satisfied by a
     // commented-out step, by a step whose `name:` merely mentions the recipe, and by any longer
-    // recipe name sharing the prefix -- `just pg doc-pg` is a prefix of the `doc-pg-all` step
+    // recipe name sharing the prefix -- `just doc-pg` is a prefix of the `doc-pg-all` step
     // this change deletes. Both `- run:` and a `run:` under its own `name:` are the same step.
     let workflow = support::read(support::repository_root().join(".github/workflows/on-pr-synced.yml"));
     let commands: Vec<&str> = workflow
@@ -32,7 +32,7 @@ fn gates_compose_every_required_check() {
         .map(str::trim)
         .collect();
     assert!(!commands.is_empty(), "no `run:` step parsed -- this guard would pass vacuously");
-    for required in ["just pg test-hygiene", "just pg doc-gate-selftest"] {
+    for required in ["just test-hygiene", "just doc-gate-selftest"] {
         assert!(
             commands.contains(&required),
             "a CI job must run `{required}` as a whole step; no CI job runs `gate-offline`, so \
@@ -59,7 +59,6 @@ fn release_gate_covers_one_immutable_deployable_artifact() {
     let dump = support::just_dump(&support::lane_root());
     let release = support::recipe_body(&dump, "gate-pg-release");
     for required in [
-        "export KMONEY_USE_LOCAL_CORE=0",
         "just gate-pg",
         "just _yb-ab-ref",
         "node-image.sh",
@@ -80,7 +79,7 @@ fn release_gate_covers_one_immutable_deployable_artifact() {
         assert!(
             !release.contains(operational),
             "gate-pg-release runs {operational}, which proves YugabyteDB's behaviour rather than \
-             the extension's; it belongs to `just pg test-yb-deployment`"
+             the extension's; it belongs to `just test-yb-deployment`"
         );
     }
 
@@ -265,4 +264,37 @@ fn gates_do_not_disable_set_e_while_capturing_output() {
         "a gate body in an `||` list runs with set -e disabled; capture PIPESTATUS after the pipeline:\n{}",
         offenders.join("\n")
     );
+}
+
+#[test]
+fn correctness_nodes_share_explicit_container_and_daemon_memory_limits() {
+    for file in [
+        "kamu-money-pg/yb/run-yb.sh",
+        "kamu-money-pg/yb/run-yb-regress.sh",
+        "kamu-money-pg/yb/run-yb-driver.sh",
+        "kamu-money-pg/yb/cluster.sh",
+    ] {
+        let text = support::read(support::lane_root().join(file));
+        assert!(text.contains("/node-limits.sh"), "{file} must use shared resource limits");
+        let starts: Vec<_> = support::logical_lines(&text)
+            .into_iter()
+            .filter(|(_, line)| !line.trim_start().starts_with('#') && line.contains("bin/yugabyted start"))
+            .collect();
+        assert!(!starts.is_empty(), "{file}: no node start checked");
+        for (_, start) in starts {
+            for limit in [
+                "--memory \"$YB_NODE_MEM\"",
+                "--memory-swap \"$YB_NODE_MEM\"",
+                "memory_limit_hard_bytes=$YB_TSERVER_MEM_BYTES",
+            ] {
+                assert!(start.contains(limit), "{file}: node start lacks {limit}");
+            }
+            if !start.contains("--read_replica") {
+                assert!(
+                    start.contains("memory_limit_hard_bytes=$YB_MASTER_MEM_BYTES"),
+                    "{file}: primary node lacks master memory limit"
+                );
+            }
+        }
+    }
 }

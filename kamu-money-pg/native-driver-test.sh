@@ -3,8 +3,6 @@
 # owns PostgreSQL and the test process; the trap owns container cleanup.
 set -euo pipefail
 cd "$(dirname "$0")/.."   # repo root
-# shellcheck source=scripts/docker-core-context.sh
-source ./scripts/docker-core-context.sh
 
 PG_MAJOR="${1:-18}"
 RUN_ID="$$-$(date +%s)"
@@ -25,7 +23,7 @@ trap cleanup EXIT INT TERM HUP
 
 echo "=== building the kamu-money-pg image (PG${PG_MAJOR}) ==="
 # Capture and run the immutable image ID; use a tag separate from the benchmark matrix.
-docker build "${KMONEY_CORE_DOCKER_ARGS[@]}" \
+docker build \
     -f kamu-money-pg/Dockerfile --build-arg "PG_MAJOR=${PG_MAJOR}" \
     --label "${LABEL}" --iidfile "${IIDFILE}" -t "kamu-money-pg-driver:pg${PG_MAJOR}" .
 IMAGE_ID="$(cat "${IIDFILE}")"
@@ -38,7 +36,7 @@ docker run --rm --name "$NAME" --label "${LABEL}" \
     PGCFG="/usr/lib/postgresql/${PG_MAJOR}/bin/pg_config"
 
     # Install the extension into the PostgreSQL this image already carries.
-    cargo pgrx install -p kamu-money-pg --no-default-features \
+    ./scripts/pgrx.sh install -p kamu-money-pg --no-default-features \
         --features "pg${PG_MAJOR}" -c "$PGCFG"
 
     # pgrx manages its own instance; its port convention is 28800 + major.
@@ -51,7 +49,7 @@ docker run --rm --name "$NAME" --label "${LABEL}" \
     # Serialize CREATE EXTENSION against the shared database. Assert count and skip text because
     # the Rust tests intentionally skip when MONEY_PG_NATIVE_URL is absent.
     CORE_MANIFEST="$(./scripts/resolve-core-manifest.sh)"
-    cargo test --manifest-path "$CORE_MANIFEST" \
+    cargo test --locked --manifest-path "$CORE_MANIFEST" \
         --features postgres,sqlx --test pg_native_column \
         -- --nocapture --test-threads=1 2>&1 | tee /tmp/native-driver.out
     if ! grep -q "4 passed" /tmp/native-driver.out; then

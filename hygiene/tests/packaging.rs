@@ -14,138 +14,6 @@ fn docker_context_excludes_host_state() {
     }
 }
 
-#[test]
-fn docker_builds_share_the_normalized_core_package() {
-    let root = support::lane_root();
-    let repository = support::repository_root();
-    let helper = support::read(root.join("scripts/docker-core-context.sh"));
-    for required in ["cargo package", "tests/pg_native_column.rs", "--build-context", "KMONEY_USE_LOCAL_CORE"]
-    {
-        assert!(helper.contains(required), "Docker context helper must contain {required:?}");
-    }
-
-    let core = support::manifest(repository.join("crates/money-core/Cargo.toml"));
-    let include = core["package"]["include"].as_array().expect("money-core package.include must be an array");
-    assert!(
-        include.iter().any(|entry| entry.as_str() == Some("tests/**/*.rs")),
-        "the normalized core package must include native-column integration tests"
-    );
-
-    for dockerfile in
-        ["kamu-money-pg/Dockerfile", "kamu-money-pg/yb/Dockerfile", "kamu-money-pg/yb/Dockerfile.pg15"]
-    {
-        let source = support::read(root.join(dockerfile));
-        for required in ["--from=kamu-money-core", "KMONEY_USE_LOCAL_CORE", "[patch.crates-io]"] {
-            assert!(source.contains(required), "{dockerfile} must contain {required:?}");
-        }
-    }
-
-    for caller in [
-        "Justfile",
-        "kamu-money-pg/test-matrix.sh",
-        "kamu-money-pg/native-driver-test.sh",
-        "kamu-money-pg/yb/run-yb-driver.sh",
-        "kamu-money-pg/yb/node-image.sh",
-        "kamu-money-pg/bench/run-bench-boundary-yb.sh",
-    ] {
-        // `docker buildx build` is a build too. Matching only the bare form would let a buildx
-        // invocation resolve kamu-money-core differently from its siblings and say nothing,
-        // which is the failure this guard exists to make impossible.
-        let source = support::read(root.join(caller));
-        let builds: Vec<&str> = source
-            .lines()
-            .filter(|line| {
-                let trimmed = line.trim_start();
-                !trimmed.starts_with('#')
-                    && (trimmed.contains("docker build") || trimmed.contains("docker buildx build"))
-            })
-            .collect();
-
-        // A positive control. Composing the command in one place and the context in another --
-        // `cmd=(docker build)` here, `"${cmd[@]}" "${ARGS[@]}"` there -- leaves nothing for the
-        // loop below to inspect, and that silence reads exactly like compliance.
-        assert!(
-            !builds.is_empty(),
-            "{caller} no longer names a Docker build on any line, so this guard would pass \
-             vacuously; keep the command and the core context together, or re-point the guard"
-        );
-
-        for line in builds {
-            assert!(
-                line.contains("KMONEY_CORE_DOCKER_ARGS"),
-                "{caller} has a Docker build without the normalized core context: {line}"
-            );
-        }
-    }
-
-    let dump = support::just_dump(&root);
-    let release = support::recipe_body(&dump, "gate-pg-release");
-    assert!(
-        release.contains("export KMONEY_USE_LOCAL_CORE=0"),
-        "release proof must resolve money-core from the registry"
-    );
-
-    let workflow = support::read(repository.join(".github/workflows/on-pr-synced.yml"));
-    assert!(
-        !workflow.contains("money-core-published"),
-        "ordinary container CI must not wait for first publication"
-    );
-}
-
-/// `Cargo.lock` must lock `kamu-money-core` at the version the workspace crate carries.
-///
-/// That equality, not the entry's form, is the precondition for the lane's patch. A patch is
-/// ignored when the version it offers is not the version the lockfile pins: Cargo says so in a
-/// warning and then compiles the published crate instead, and every build still succeeds. That is
-/// how this lane spent a release cycle testing kamu-money-core 0.1.1 while the tree carried 0.1.2,
-/// after a dependency bump ran bare `cargo update` here. Nothing failed, because the guards asked
-/// whether the named Docker context was PASSED, and it was.
-///
-/// The entry's form is deliberately NOT asserted, because it cannot be stable. Cargo records the
-/// resolution it just performed: a patched run rewrites the entry to a path (no `source`), an
-/// unpatched one rewrites it back to the registry. Every lane recipe patches, but a `cargo
-/// metadata` from an editor does not, so pinning the form would turn an ordinary background
-/// process into a gate failure while catching nothing the version check misses. What must hold is
-/// that whichever form is committed names the same version the tree does.
-#[test]
-fn the_lane_lockfile_resolves_money_core_through_the_patch() {
-    let lock = support::manifest(support::lane_root().join("Cargo.lock"));
-    let packages = lock["package"].as_array().expect("Cargo.lock must contain a package array");
-
-    // A positive control for the `source` inspection below: if this parse could not see the key at
-    // all, "no source" would mean "no idea" and every registry entry would read as patched.
-    assert!(
-        packages.iter().any(|package| package.get("source").is_some()),
-        "no locked package carries a `source`, so this parse cannot distinguish a patched entry \
-         from a registry one; re-point the guard"
-    );
-
-    let entry = packages
-        .iter()
-        .find(|package| package["name"].as_str() == Some("kamu-money-core"))
-        .expect("the lane must lock kamu-money-core");
-
-    // Derived, not restated: the pin cannot drift from the crate it is supposed to be.
-    let tree = support::manifest(support::repository_root().join("crates/money-core/Cargo.toml"));
-    assert_eq!(
-        entry["version"].as_str(),
-        tree["package"]["version"].as_str(),
-        "the lane locks a kamu-money-core version the workspace does not carry, so the patch \
-         offers a version the lockfile does not pin and Cargo IGNORES it -- every container suite \
-         would compile the published crate rather than this tree. Re-lock with the patch active: \
-         just pg core-relock"
-    );
-
-    // A registry entry must stay verifiable. A `source` without a `checksum` is neither a patched
-    // entry nor a checked one.
-    if entry.get("source").is_some() {
-        assert!(
-            entry.get("checksum").is_some(),
-            "kamu-money-core is locked to a registry source with no checksum"
-        );
-    }
-}
-
 /// One `FROM` stage: its alias, what it descends from, the build arguments it declares, and its
 /// RUN instructions with comment lines removed.
 struct Stage {
@@ -308,7 +176,7 @@ fn the_release_proof_compiles_the_yb_dependencies_from_empty() {
     // The scope only reaches the shipped library if the package step inherits that layer. While
     // the argument sat on the package RUN itself the relationship could not be broken; now it is
     // inherited, and re-parenting the stage would sever it without touching anything asserted above.
-    let packaging = stage_running(&parsed, "cargo pgrx package")
+    let packaging = stage_running(&parsed, "./scripts/pgrx.sh package")
         .expect("the YugabyteDB image must run `cargo pgrx package`");
     assert!(
         descends_from(&parsed, packaging, scoped),
@@ -496,7 +364,7 @@ fn extension_dependency_is_registry_resolvable() {
     assert_ne!(dependency.req.to_string(), "*", "money-core needs a version requirement");
     assert!(
         dependency.path.is_none(),
-        "money-core must not carry a manifest path; local tests inject a Cargo patch"
+        "money-core must not carry a manifest path; only the locked crates.io dependency is supported"
     );
     assert_eq!(package.publish.as_deref(), Some(&[][..]), "the extension lane must remain publish = false");
 }

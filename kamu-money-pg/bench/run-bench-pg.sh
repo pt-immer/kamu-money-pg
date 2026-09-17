@@ -94,7 +94,7 @@ fi
     echo
 } | tee "$OUT"
 
-# The image's CMD is `cargo pgrx test`, which builds, runs the suite and tears its server down --
+# The image's CMD is `./scripts/pgrx.sh test`, which builds, runs the suite and tears its server down --
 # so it is started idle here and driven by exec instead. `in-container.sh` does the same install
 # the test matrix performs and then leaves a server up.
 docker run -d --name "$NAME" --label "kamu-money-pg.bench=$RUN_ID" \

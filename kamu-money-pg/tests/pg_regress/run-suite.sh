@@ -5,7 +5,7 @@
 #   run-suite.sh --client "<client invocation>" --label <name> [--outdir DIR]
 #                [--server-exec "<prefix that reads a script on stdin>"] [case ...]
 #
-# WHY THIS EXISTS. `cargo pgrx test` manages its own PostgreSQL and cannot be aimed at
+# WHY THIS EXISTS. `./scripts/pgrx.sh test` manages its own PostgreSQL and cannot be aimed at
 # YugabyteDB, so the in-backend `#[pg_test]` contract had never run there. Everything YugabyteDB
 # was known to do came from one
 # ~112-line script (yb/abi_battery.sql). This suite is that contract restated as SQL, so it

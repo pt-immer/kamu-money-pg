@@ -15,17 +15,7 @@ pub fn lane_root() -> PathBuf {
 }
 
 pub fn repository_root() -> PathBuf {
-    let root = lane_root()
-        .parent()
-        .and_then(Path::parent)
-        .expect("extensions/money-pg must stay below the repository root")
-        .to_path_buf();
-    assert!(
-        root.join("Cargo.toml").is_file() && root.join("crates").is_dir(),
-        "{} is not the repository root",
-        root.display()
-    );
-    root
+    lane_root()
 }
 
 pub fn read(path: impl AsRef<Path>) -> String {

@@ -7,7 +7,7 @@
 # kamu-money-pg/yb/abi_battery.sql on that stock PG15 and exports the output, so `just yb-ab`
 # can diff it against the YB run -- a diff attributable purely to the YB fork's ABI.
 #
-# Built by `just pg yb-ab`, which supplies both Docker contexts.
+# Built by `just yb-ab`, using this repository as its Docker context.
 ARG YB_IMAGE=yugabytedb/yugabyte:2025.2.5.1-b1
 FROM ${YB_IMAGE} AS build
 USER root
@@ -15,9 +15,9 @@ USER root
 # Build deps (UBI/CentOS-family). `perl` is required to build PostgreSQL from source;
 # libclang for pgrx's bindgen.
 RUN (command -v dnf >/dev/null 2>&1 && \
-     dnf install -y curl gcc gcc-c++ make clang clang-devel llvm-libs perl \
+     dnf install -y jq curl gcc gcc-c++ make clang clang-devel llvm-libs perl \
        bison flex readline-devel zlib-devel libicu-devel openssl-devel ca-certificates \
-     || yum install -y curl gcc gcc-c++ make clang clang-devel llvm-libs perl \
+     || yum install -y jq curl gcc gcc-c++ make clang clang-devel llvm-libs perl \
        bison flex readline-devel zlib-devel libicu-devel openssl-devel ca-certificates)
 
 # Optional TLS-inspecting-proxy trust anchors (same rule as kamu-money-pg/yb/Dockerfile).
@@ -43,20 +43,9 @@ RUN cargo pgrx init --pg15 download
 WORKDIR /work
 USER root
 COPY --chown=pgrx . .
-ARG KMONEY_USE_LOCAL_CORE=1
-COPY --from=kamu-money-core --chown=pgrx:pgrx . /opt/kamu-money-core
 USER pgrx
-# The A/B is only a claim about the YugabyteDB fork's ABI if BOTH sides compile the same
-# kamu-money-core. A patch that is passed and then ignored would make this reference a different
-# build, and the diff would attribute that difference to YugabyteDB.
-RUN case "${KMONEY_USE_LOCAL_CORE}" in \
-      0) echo "kamu-money-core: resolving from crates.io"; WANT=registry ;; \
-      1) printf '\n[patch.crates-io]\nkamu-money-core = { path = "/opt/kamu-money-core" }\n' \
-           >> /work/.cargo/config.toml; WANT=local ;; \
-      *) echo "KMONEY_USE_LOCAL_CORE must be 0 or 1" >&2; exit 2 ;; \
-    esac; \
-    bash scripts/assert-core-resolution.sh "$WANT"
-ENV KMONEY_USE_LOCAL_CORE=${KMONEY_USE_LOCAL_CORE}
+# The A/B reference must resolve the same locked registry core as the YB build.
+RUN bash scripts/assert-core-resolution.sh
 # Same PGRX_HOME reconciliation as the other Dockerfiles: the forced relative /work/.pgrx
 # must resolve to the real home pgrx init wrote.
 RUN ln -sfn /home/pgrx/.pgrx /work/.pgrx
@@ -73,7 +62,7 @@ RUN ln -sfn /home/pgrx/.pgrx /work/.pgrx
 RUN set -eux; \
     CFG="$(ls /home/pgrx/.pgrx/15.*/pgrx-install/bin/pg_config)"; \
     BIN="$(dirname "$CFG")"; \
-    cargo pgrx install -p kamu-money-pg --no-default-features --features pg15 -c "$CFG"; \
+    ./scripts/pgrx.sh install -p kamu-money-pg --no-default-features --features pg15 -c "$CFG"; \
     mkdir -p /tmp/out; \
     "$BIN/initdb" -U postgres -D /tmp/pg15data >/dev/null; \
     "$BIN/pg_ctl" -D /tmp/pg15data -o "-p 5432 -k /tmp -c listen_addresses=127.0.0.1" -w start; \

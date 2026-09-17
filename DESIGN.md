@@ -1,9 +1,9 @@
 # kamu-money-pg — extension lane contract
 
-`extensions/money-pg` is an excluded Cargo workspace containing the `kmoney`
+This repository is a standalone Cargo workspace containing the `kmoney`
 pgrx extension and its database validation harness. It implements the
 PostgreSQL side of
-[`kamu-money-core`'s PostgreSQL boundary](../../crates/money-core/DESIGN.md#the-postgresql-boundary).
+[`kamu-money-core`'s PostgreSQL boundary](https://github.com/pt-immer/kamu-public-crates/blob/main/crates/money-core/DESIGN.md#the-postgresql-boundary).
 
 Current support:
 
@@ -16,22 +16,18 @@ Current support:
 ## Workspace boundary
 
 ```text
-extensions/money-pg/
-├── Cargo.toml             nested workspace, patch, profiles, MSRV
-├── Cargo.lock             lane-only dependency graph
-├── deny.toml              lane-only advisory and license policy
+kamu-money-pg/
+├── Cargo.toml             workspace, patch, profiles, MSRV
+├── Cargo.lock             repository dependency graph
+├── deny.toml              repository advisory and license policy
 ├── hygiene/               pgrx-free structural guards and payload tests
 └── kamu-money-pg/         pgrx cdylib, SQL cases, Docker and YB harness
 ```
 
-The lane is excluded from the repository root because Cargo honors
-`[patch.crates-io]` and profiles only at a workspace root. Adding the pgrx fork
-to the public workspace would also put git dependencies and PostgreSQL backend
-features into the lockfile and audit surface of nine unrelated crates.
-
-`kamu-money-core` remains a version dependency, never a manifest path.
-Developer and ordinary container tests inject the local normalized package.
-`gate-pg-release` disables that patch and proves registry resolution.
+The workspace owns its pgrx fork patch and unwind profiles.
+`kamu-money-core` is a crates.io version dependency, never a local path.
+All builds use the committed registry lockfile. The driver suites run from
+the exact core package selected by that graph.
 
 The lane is `publish = false`. `kamu-money-pg` is a package and release
 identity, but not a crates.io artifact: Cargo packages do not carry the root
@@ -181,17 +177,16 @@ they reject native OIDs and read through `::text`.
 
 | Layer | Command or suite | Claim |
 | --- | --- | --- |
-| Formatting, Clippy, docs, deny | `just pg gate-offline` | Rust and repository policy without a database |
+| Formatting, Clippy, docs, deny | `just gate-offline` | Rust and repository policy without a database |
 | Safe payload | hygiene tests and Miri | Width, byte order, code, currency, domain |
-| PostgreSQL majors | `just pg test-pg-all` | Catalog, SQL semantics, binary I/O on PG15–18 |
-| Portable driver path | `just pg test-pg-driver` | postgres-types and sqlx against native columns |
-| YB image controls | `just pg yb-image-selftest` | Unknown and moved tags fail closed |
-| Stock/YB equivalence | `just pg yb-ab` | Same SQL cases and golden output |
-| Cluster behavior | release gate suites | Every node, tablet split, concurrency, replica, restore |
+| PostgreSQL majors | `just test-pg-all` | Catalog, SQL semantics, binary I/O on PG15–18 |
+| Portable driver path | `just test-pg-driver` | postgres-types and sqlx against native columns |
+| YB image controls | `just yb-image-selftest` | Unknown and moved tags fail closed |
+| Stock/YB equivalence | `just yb-ab` | Same SQL cases and golden output |
 | Developer lane gate | `just gate-pg` | Offline checks, PG15–18, and portable database adapters |
-| Repository pre-push gate | `just gate-all` | Public workspace plus developer lane gate |
-| Native YB release proof | `just pg gate-pg-release` | From-source native build, byte-exact A/B against upstream PG15, ported case suite |
-| YB deployment suites | `just pg test-yb-deployment` | Multi-node, read replica, concurrency, dump and restore |
+| Repository pre-push gate | `just gate` | Complete developer extension gate |
+| Native YB release proof | `just gate-pg-release` | From-source native build, byte-exact A/B against upstream PG15, ported case suite |
+| YB deployment suites | `just test-yb-deployment` | Multi-node, read replica, concurrency, dump and restore |
 
 [`kamu-money-pg/tests/pg_regress/COVERAGE.md`](kamu-money-pg/tests/pg_regress/COVERAGE.md)
 maps every `#[pg_test]` to a portable SQL case or a reasoned
@@ -227,7 +222,7 @@ the manifest and stops before crates.io.
 - Certified against `yugabytedb/yugabyte:2025.2.5.1-b1`, the pinned image every
   suite boots. Other versions are not certified rather than known-broken: any
   YugabyteDB whose PostgreSQL fork the pgrx fork supports should work, and
-  re-pinning plus a green `just pg gate-pg-release` is what turns that into a
+  re-pinning plus a green `just gate-pg-release` is what turns that into a
   claim.
 - Same-version dump/restore is gated. A two-version rolling YugabyteDB upgrade
   has not been rehearsed.

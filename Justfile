@@ -1,12 +1,9 @@
-# Excluded PostgreSQL extension workspace. Enter through `just pg <recipe>` from
-# the repository root. Root policy owns shell lint and scrub for this whole tree.
-set shell := ["bash", "-uc"]
+# PostgreSQL/YugabyteDB extension workspace. All recipes run from this root.
+set shell := ["bash", "-euo", "pipefail", "-c"]
+export PATH := env_var("PATH") + ":" + justfile_directory() + "/.tools/bin:" + justfile_directory() + "/node_modules/.bin"
 
 PG_MAJORS := "15 16 17 18"
 
-# Keep the nested quotes: Cargo must parse the path as TOML. For nextest, pass
-# this after the subcommand so child metadata invocations inherit it.
-CORE_PATCH := "--config 'patch.crates-io.kamu-money-core.path=\"../../crates/money-core\"'"
 
 [doc("List extension-lane recipes.")]
 default:
@@ -14,7 +11,7 @@ default:
 
 # Environment
 [doc("Install the toolchain pieces the gates need. Idempotent.")]
-setup:
+setup: setup-tools
     #!/usr/bin/env bash
     set -uo pipefail
     rc=0
@@ -24,7 +21,7 @@ setup:
         echo "setup: install these components however that toolchain does it: rustfmt, clippy, rust-src"
         rc=1
     else
-        for c in rustfmt clippy; do
+        for c in rustfmt clippy rust-src; do
             if rustup component add "$c" >/dev/null 2>&1; then
                 echo "setup: rustup component $c ok"
             else
@@ -84,7 +81,7 @@ setup:
 
 [doc("Report every extension-lane prerequisite and cleanup warning.")]
 [no-exit-message]
-doctor:
+doctor: doctor-tools
     #!/usr/bin/env bash
     # No `-e`: every check runs, so one absent tool cannot hide the rest.
     set -uo pipefail
@@ -244,11 +241,11 @@ fmt-check:
 
 [doc("Clippy the extension at the pedantry its crate root denies, pinned to one PG major.")]
 lint:
-    cargo clippy {{ CORE_PATCH }} -p kamu-money-pg --no-default-features --features pg18 --all-targets -- -D warnings
+    cargo clippy --locked -p kamu-money-pg --no-default-features --features pg18 --all-targets -- -D warnings
 
 [doc("Audit the lane lockfile, allowing only the pinned public pgrx fork.")]
 deny:
-    ./scripts/deny.sh
+    cargo deny --locked check
 
 [doc("Populate the in-repo PGRX_HOME from the host pg_config.")]
 pgrx-init pg_config="/usr/bin/pg_config":
@@ -266,7 +263,7 @@ pgrx-init pg_config="/usr/bin/pg_config":
 
 [doc("Compile-check kamu-money-pg locally against one major (no container, no tests).")]
 check-pg pg="18":
-    cargo check {{ CORE_PATCH }} -p kamu-money-pg --no-default-features --features pg{{ pg }} --all-targets
+    cargo check --locked -p kamu-money-pg --no-default-features --features pg{{ pg }} --all-targets
 
 [doc("Fingerprint normalized generated SQL, optionally checking an expected hash.")]
 schema-hash pg="18" expect="" features="":
@@ -274,12 +271,12 @@ schema-hash pg="18" expect="" features="":
 
 [doc("Run pgrx-free repository guards and safe-payload tests.")]
 test-hygiene:
-    cargo nextest run {{ CORE_PATCH }} -p kamu-money-pg-hygiene
-    cargo test {{ CORE_PATCH }} -p kamu-money-pg-hygiene --doc
+    cargo nextest run --locked -p kamu-money-pg-hygiene
+    cargo test --locked -p kamu-money-pg-hygiene --doc
 
 [doc("Run Miri over the exact pgrx-free payload codec.")]
 miri-payload:
-    cargo +nightly miri test {{ CORE_PATCH }} -p kamu-money-pg-hygiene --test payload_miri
+    cargo +nightly miri test --locked -p kamu-money-pg-hygiene --test payload_miri
 
 # rustdoc reads only what it is told to compile and told to keep, and this crate
 # defaults both to almost nothing. Every `#[pg_extern]` and `#[pg_operator]` is a
@@ -305,7 +302,7 @@ miri-payload:
 # `pgrx-pg-sys` build script rather than in rustdoc.
 [doc("Build the extension's API docs, failing on a broken intra-doc link.")]
 doc-pg:
-    RUSTDOCFLAGS='-D warnings' cargo doc {{ CORE_PATCH }} -p kamu-money-pg --no-default-features --features pg18,pg_test,boundary-probe --no-deps --document-private-items
+    RUSTDOCFLAGS='-D warnings' cargo doc --locked -p kamu-money-pg --no-default-features --features pg18,pg_test,boundary-probe --no-deps --document-private-items
 
 # Database and artifact tests
 [doc("The text adapter against a live YugabyteDB. The suite is in the main workspace; the image identity is resolved here.")]
@@ -314,8 +311,9 @@ test-yb tag="":
     set -euo pipefail
     IMAGE="${KMONEY_YB_IMAGE:-$(./kamu-money-pg/yb/yb-image.sh {{ tag }})}"
     echo "test-yb: text adapter against $IMAGE"
+    CORE_MANIFEST="$(./scripts/resolve-core-manifest.sh)"
     KMONEY_YB_IMAGE="$IMAGE" \
-        cargo test --manifest-path ../../Cargo.toml \
+        cargo test --locked --manifest-path "$CORE_MANIFEST" \
             -p kamu-money-core --features postgres --test yugabyte_roundtrip -- --ignored --nocapture
 
 [doc("The pgrx extension suite, once per supported PostgreSQL major, each in a container.")]
@@ -351,7 +349,6 @@ yb-build tag="":
     RUN_ROOT="${KMONEY_RUN_ROOT:-kamu-money-pg/yb/out}"
     YB_REF="$(./kamu-money-pg/yb/yb-image.sh {{ tag }})"
     echo "yb: image identity $YB_REF"
-    source ./scripts/docker-core-context.sh
     # CI sets KMONEY_BUILD_CACHE_DIR; locally it stays unset, because the daemon already holds
     # these layers. Two invocations rather than one: `mode=max` over the whole graph would also
     # export the package step's multi-gigabyte target/ diff, on every source change -- an upload
@@ -362,26 +359,22 @@ yb-build tag="":
     # the default `docker` driver is not it. Depending on which builder a bare `docker build`
     # happens to route to would make the export silently do nothing on some hosts.
     #
-    # Each form carries the normalized core context on its own line rather than composing the
-    # command in one place and the context in another: docker_builds_share_the_normalized_core_package
-    # reads these lines individually, and a build that resolves kamu-money-core differently from its
-    # siblings is what it exists to catch.
     if [ -n "${KMONEY_BUILD_CACHE_DIR:-}" ]; then
         bash ./scripts/require-cache-exporter.sh yb-build
         mkdir -p "${KMONEY_BUILD_CACHE_DIR}/yb"
-        docker buildx build "${KMONEY_CORE_DOCKER_ARGS[@]}" \
+        docker buildx build \
             -f kamu-money-pg/yb/Dockerfile --target deps --output type=cacheonly \
             --build-arg YB_IMAGE="$YB_REF" \
             --build-arg KMONEY_CACHE_ID="${KMONEY_CACHE_ID:-shared}" \
             --cache-from "type=local,src=${KMONEY_BUILD_CACHE_DIR}/yb" \
             --cache-to "type=local,dest=${KMONEY_BUILD_CACHE_DIR}/yb,mode=max" .
-        docker buildx build "${KMONEY_CORE_DOCKER_ARGS[@]}" \
+        docker buildx build \
             -f kamu-money-pg/yb/Dockerfile --target artifact \
             --build-arg YB_IMAGE="$YB_REF" \
             --build-arg KMONEY_CACHE_ID="${KMONEY_CACHE_ID:-shared}" \
             --cache-from "type=local,src=${KMONEY_BUILD_CACHE_DIR}/yb" -o "$RUN_ROOT" .
     else
-        docker build "${KMONEY_CORE_DOCKER_ARGS[@]}" \
+        docker build \
             -f kamu-money-pg/yb/Dockerfile --target artifact \
             --build-arg YB_IMAGE="$YB_REF" \
             --build-arg KMONEY_CACHE_ID="${KMONEY_CACHE_ID:-shared}" -o "$RUN_ROOT" .
@@ -420,7 +413,7 @@ yb-selftest out="":
         exit 0
     fi
     KMONEY_BATTERY_OUTPUT="$OUT" \
-        cargo nextest run {{ CORE_PATCH }} -p kamu-money-pg-hygiene --test assert_battery --run-ignored all
+        cargo nextest run --locked -p kamu-money-pg-hygiene --test assert_battery --run-ignored all
 [doc("The ported #[pg_test] suite against a live single-node YugabyteDB.")]
 test-yb-regress tag="": (yb-build tag)
     #!/usr/bin/env bash
@@ -464,22 +457,16 @@ yb-pin-check tag="":
 
 [doc("Negative controls for the image pin gate: every refusal path, and both overrides.")]
 yb-image-selftest:
-    cargo nextest run {{ CORE_PATCH }} -p kamu-money-pg-hygiene --test yb_image --run-ignored all
-# The one command whose flag is load-bearing. `cargo update -p kamu-money-core` WITHOUT the patch
-# re-locks the lane to whatever crates.io last published, and every container suite then compiles
-# the published crate instead of this tree -- silently, because a patch offering a version the
-# lockfile does not pin is ignored rather than refused. That has happened once, through a
-# dependency bump. `hygiene` now fails on the resulting lockfile, and this recipe is the fix it
-# names, so nobody has to reconstruct the quoting.
-[doc("Re-lock kamu-money-core against the workspace crate, with the lane patch active.")]
+    cargo nextest run --locked -p kamu-money-pg-hygiene --test yb_image --run-ignored all
+[doc("Update the locked registry version of kamu-money-core.")]
 core-relock:
-    cargo update {{ CORE_PATCH }} -p kamu-money-core
+    cargo update -p kamu-money-core
 
 # Deliberately not a hygiene test: it runs `doc-pg`, so it needs a populated PGRX_HOME, which the
 # job running `test-hygiene` does not have. It belongs beside that recipe, in the job that has one.
 [doc("Negative controls for the doc gate: a planted link in each region it must reach.")]
 doc-gate-selftest:
-    cargo nextest run {{ CORE_PATCH }} -p kamu-money-pg-hygiene --test doc_gate --run-ignored all
+    cargo nextest run --locked -p kamu-money-pg-hygiene --test doc_gate --run-ignored all
 
 # Measurements; never gates
 [doc("SQL cost: kmoney vs numeric(36,18) on stock PostgreSQL, with the floor. Never a gate.")]
@@ -537,9 +524,8 @@ _yb-ab-ref base runtime="":
     done
     echo "yb: base identity    $BASE (artifact build and PG15 reference are compiled against this)"
     echo "yb: battery runtime  $RUNTIME"
-    source ./scripts/docker-core-context.sh
     if [ "$RUNTIME" = "$BASE" ]; then
-        docker build "${KMONEY_CORE_DOCKER_ARGS[@]}" \
+        docker build \
             -f kamu-money-pg/yb/Dockerfile --target artifact \
             --build-arg YB_IMAGE="$BASE" \
             --build-arg KMONEY_CACHE_ID="${KMONEY_CACHE_ID:-shared}" -o "$RUN_ROOT" .
@@ -550,7 +536,7 @@ _yb-ab-ref base runtime="":
     fi
     ./kamu-money-pg/yb/run-yb.sh "$RUNTIME" "$RUN_ROOT" "$RUN_ROOT/out-yb.txt" kamu-money-pg/yb/abi_battery.sql
     just yb-selftest "$RUN_ROOT/out-yb.txt"
-    docker build "${KMONEY_CORE_DOCKER_ARGS[@]}" \
+    docker build \
         -f kamu-money-pg/yb/Dockerfile.pg15 --target ref \
         --build-arg YB_IMAGE="$BASE" -o "$RUN_ROOT/ref" .
     ./kamu-money-pg/yb/assert-battery.sh "$RUN_ROOT/ref/out-pg15.txt" pg15-extracted 0
@@ -599,7 +585,7 @@ test-pg-all: test-yb (test-pg PG_MAJORS "4") test-pg-driver test-yb-driver
 
 # Gates
 [doc("The gate for a change that touches no database: format, lint, audit, docs, Miri, and offline tests.")]
-gate-offline: fmt-check lint deny doc-gate-selftest test-hygiene miri-payload
+gate-offline: lint-all lint deny doc-gate-selftest test-hygiene miri-payload
 
 [doc("The offline gate plus every suite reachable without a from-source YugabyteDB build.")]
 gate-pg: gate-offline yb-image-selftest test-pg-all
@@ -618,7 +604,7 @@ gate-pg: gate-offline yb-image-selftest test-pg-all
 # runs a cluster, which this repository does not: the extension is `publish = false` and the node
 # image is a test fixture.
 #
-# So they keep their recipes and leave the gate: `just pg test-yb-deployment` runs all four.
+# So they keep their recipes and leave the gate: `just test-yb-deployment` runs all four.
 [doc("Run the release gate: the byte-exact A/B and the case suite against a native YugabyteDB.")]
 gate-pg-release tag="":
     #!/usr/bin/env bash
@@ -628,7 +614,6 @@ gate-pg-release tag="":
     workspace_lock "gate-pg-release" || exit 1
 
     # Release proof resolves `kamu-money-core` from its version requirement.
-    export KMONEY_USE_LOCAL_CORE=0
     # A unique cache scope is an EMPTY BuildKit cache: the release artifact is
     # compiled from scratch, never assembled from a shared incremental cache.
     export KMONEY_CACHE_ID="release-$$-$(od -An -N4 -tx4 /dev/urandom | tr -d ' \n')"
@@ -689,3 +674,90 @@ containers:
     echo
     echo "remove them with: docker rm -f \$(docker ps -aq --filter 'label=kamu-money-pg.revision')"
     exit 1
+
+[doc("Check TOML formatting, Markdown, spelling, shell scripts and source hygiene.")]
+lint-all: fmt-check lint-md lint-toml lint-spell lint-shell scrub
+
+[doc("Lint Markdown files.")]
+lint-md:
+    markdownlint-cli2 "**/*.md"
+
+[doc("Lint and check formatting of TOML files.")]
+lint-toml:
+    taplo fmt --check
+    taplo lint
+
+[doc("Spell-check sources and documentation.")]
+lint-spell:
+    typos
+
+[doc("ShellCheck every tracked and untracked source script.")]
+lint-shell:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    files=$(mktemp)
+    trap 'rm -f "$files"' EXIT
+    git ls-files --cached --others --exclude-standard -z '*.sh' 'scripts/locked/cargo' > "$files"
+    xargs -0 -r shellcheck -x < "$files"
+
+[doc("Scan tracked files for credentials, PII, and host identity.")]
+scrub:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    hits=0
+    scan() { # label pattern [exclude-ere]
+        local label="$1" pattern="$2" exclude="${3:-}"
+        local found status=0
+        found=$(git grep -nIE "$pattern" -- ':!Justfile' 2>&1) || status=$?
+        if [ "$status" -gt 1 ]; then
+            printf 'scrub: could not scan tracked files: %s\n' "$found" >&2
+            exit "$status"
+        fi
+        if [ -n "$exclude" ]; then
+            found=$(printf '%s\n' "$found" | grep -vE "$exclude")
+        fi
+        if [ -n "$found" ]; then
+            printf '\033[31m%s\033[0m\n%s\n\n' "$label" "$found"
+            hits=$((hits+1))
+        fi
+    }
+    # Generic container and CI accounts are not host identities.
+    scan "host home paths"      "/home/[a-z][a-z0-9_-]+" "/home/(pgrx|yugabyte|postgres|runner|node|ubuntu)\b"
+    # Reserved fixture domains and `noreply@` are not personal contacts.
+    scan "email addresses"      "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}" \
+         "noreply@|@(example|test|invalid|localhost)\.|@example\.(com|net|org)|\.(invalid|test|example)\b"
+    # Require four octets so decimal fixtures cannot resemble private IPs.
+    scan "private IPv4"         "\b(10|192\.168|172\.(1[6-9]|2[0-9]|3[01]))\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\b"
+    # Match `localhost` only where it is used as a host token.
+    scan "localhost as a host"  "(://|@|=[ ]*[\"']?|-h[ ]+)localhost([:/\"' ]|$)"
+    scan "all-interface bind"   "[\"'=: ]0\.0\.0\.0[\"':]"
+    scan "credential prefixes"  "(ghp_|github_pat_|sk-[a-zA-Z0-9]{20}|AKIA[0-9A-Z]{16}|BEGIN [A-Z ]*PRIVATE KEY)"
+    # CPU and kernel identifiers can fingerprint benchmark hosts.
+    scan "cpu model names"      "\b(Xeon|EPYC|Ryzen|Core\(TM\)|Threadripper)\b"
+    scan "kernel/distro string" "\b[0-9]+\.[0-9]+\.[0-9]+-[0-9]+-(arch|generic|cachyos|azure|aws|gcp)[a-z-]*\b"
+    # Read this host's names from the environment; ignore generic service users.
+    for needle in "${USER:-}" "$(hostname 2>/dev/null)"; do
+        case "$needle" in
+            runner|ubuntu|node|postgres|pgrx|yugabyte|root|admin|user|build|ci) continue ;;
+        esac
+        if [ -n "$needle" ] && [ "${#needle}" -ge 3 ]; then
+            scan "this machine's identifiers" "\b${needle}\b"
+        fi
+    done
+    if [ "$hits" -gt 0 ]; then
+        echo "scrub: $hits category/categories need attention BEFORE any commit, tag, push or publish"
+        exit 1
+    fi
+    echo "scrub: clean"
+
+
+[doc("Install pinned shared development tools.")]
+setup-tools:
+    ./scripts/dev-tools.sh setup
+
+[doc("Check pinned shared development tools.")]
+doctor-tools:
+    ./scripts/dev-tools.sh doctor
+
+[doc("Complete development gate for the extension repository.")]
+gate: gate-pg

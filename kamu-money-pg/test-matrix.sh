@@ -12,8 +12,6 @@ DEFAULT_MAJORS=(15 16 17 18)
 MAJORS=("${@:-${DEFAULT_MAJORS[@]}}")
 
 cd "$(dirname "$0")/.."
-# shellcheck source=scripts/docker-core-context.sh
-source ./scripts/docker-core-context.sh
 
 # Include random entropy because PID namespaces can repeat on a shared daemon.
 REVISION="$(git rev-parse --short HEAD 2>/dev/null || echo nogit)"
@@ -61,19 +59,15 @@ one_major() {
   # the built image in the daemon by itself -- and this function has to `docker run` it below.
   # Depending on which builder a bare `docker build` happens to route to would make the export
   # silently do nothing on some hosts.
-  # Each form carries the normalized core context on its own line, rather than composing the
-  # command in one place and the context in another: `docker_builds_share_the_normalized_core_package`
-  # reads these lines individually, and a build that resolves kamu-money-core differently from
-  # its siblings is exactly what it exists to catch.
   local -a build_cmd
   if [ -n "${KMONEY_BUILD_CACHE_DIR:-}" ]; then
     bash ./scripts/require-cache-exporter.sh test-matrix
     mkdir -p "${KMONEY_BUILD_CACHE_DIR}/pg${pg}"
-    build_cmd=(docker buildx build --load "${KMONEY_CORE_DOCKER_ARGS[@]}"
+    build_cmd=(docker buildx build --load
       --cache-from "type=local,src=${KMONEY_BUILD_CACHE_DIR}/pg${pg}"
       --cache-to "type=local,dest=${KMONEY_BUILD_CACHE_DIR}/pg${pg},mode=max")
   else
-    build_cmd=(docker build "${KMONEY_CORE_DOCKER_ARGS[@]}")
+    build_cmd=(docker build)
   fi
 
   local iidfile image_id t0 t_image t_test
@@ -93,7 +87,7 @@ one_major() {
   echo "PG${pg}: testing image ${image_id}"
 
   # Cargo caches persist across runs in named volumes: the compile happens at
-  # RUN time (the image CMD is `cargo pgrx test`), so without these every run
+  # RUN time (the image CMD is `./scripts/pgrx.sh test`), so without these every run
   # rebuilds pgrx and all dependencies into a fresh /work/target. Cargo's own
   # fingerprinting decides what is reusable, so this trades no correctness --
   # only the re-proving of unchanged compilation. The target volume is

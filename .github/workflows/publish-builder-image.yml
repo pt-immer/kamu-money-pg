@@ -1,0 +1,126 @@
+name: Publish builder image
+
+# The lane's pgrx build environment, published so it can be pulled rather than reproduced.
+# The tag is derived from the inputs that decide the image; the digest is the identity.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - kamu-money-pg/Dockerfile
+      - kamu-money-pg/ca-certs/**
+      - rust-toolchain.toml
+      - .dockerignore
+      - .github/workflows/publish-builder-image.yml
+  workflow_dispatch:
+    inputs:
+      rebuild:
+        description: "Build even though the derived tag is already published"
+        type: boolean
+        default: false
+
+# Two runs pushing one tag would race; cancelling would abandon a tag nothing else builds.
+concurrency:
+  group: publish-builder-image
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: publish builder image
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      # The only job in this repository that writes a package.
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - id: image
+        name: Derive the tag from what decides the image
+        env:
+          INPUTS_HASH: ${{ hashFiles('kamu-money-pg/Dockerfile', 'kamu-money-pg/ca-certs/**', 'rust-toolchain.toml', '.dockerignore') }}
+          DOCKERFILE: kamu-money-pg/Dockerfile
+          OWNER_AND_NAME: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [ -z "$INPUTS_HASH" ]; then
+            echo "::error::hashFiles matched none of the inputs; the tag would not be derived"
+            exit 1
+          fi
+          # The major's one home is the Dockerfile's ARG default.
+          major="$(sed -n 's/^ARG PG_MAJOR=\([0-9][0-9]*\)$/\1/p' "$DOCKERFILE" | head -n 1)"
+          if [ -z "$major" ]; then
+            echo "::error::$DOCKERFILE states no ARG PG_MAJOR default to build"
+            exit 1
+          fi
+          {
+            echo "name=ghcr.io/${OWNER_AND_NAME,,}/money-pg-builder"
+            echo "tag=pg${major}-${INPUTS_HASH:0:16}"
+            echo "major=${major}"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Sign in to the registry
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY_USER: ${{ github.actor }}
+        run: printf '%s\n' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
+
+      - id: existing
+        name: Ask whether this tag was already published
+        env:
+          REFERENCE: ${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}
+          REBUILD: ${{ inputs.rebuild }}
+        run: |
+          set -euo pipefail
+          # The way back when a tag is correct but the image behind it is not.
+          if [ "${REBUILD:-false}" = "true" ]; then
+            echo "published=false" >>"$GITHUB_OUTPUT"
+            echo "Rebuild requested; $REFERENCE will be built whether or not it exists."
+          # Absent is the ordinary answer, not a failure; anything else is left to the build.
+          elif docker buildx imagetools inspect "$REFERENCE" >/dev/null 2>&1; then
+            echo "published=true" >>"$GITHUB_OUTPUT"
+            echo "$REFERENCE is already published; nothing decides a new image."
+          else
+            echo "published=false" >>"$GITHUB_OUTPUT"
+          fi
+
+      - id: publish
+        name: Build and publish
+        if: ${{ steps.existing.outputs.published == 'false' }}
+        working-directory: .
+        env:
+          REFERENCE: ${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}
+          MAJOR: ${{ steps.image.outputs.major }}
+          SOURCE: ${{ github.server_url }}/${{ github.repository }}
+          REVISION: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # The source label is what links the package to this repository.
+          docker buildx build --push \
+            --target builder \
+            --build-arg "PG_MAJOR=${MAJOR}" \
+            --label "org.opencontainers.image.source=${SOURCE}" \
+            --label "org.opencontainers.image.revision=${REVISION}" \
+            --label "org.opencontainers.image.licenses=MIT OR Apache-2.0" \
+            --label "org.opencontainers.image.description=pgrx build environment: a pinned Rust toolchain, cargo-pgrx, PostgreSQL ${MAJOR} with development headers, and an initialised PGRX_HOME." \
+            --metadata-file metadata.json \
+            -f kamu-money-pg/Dockerfile \
+            -t "$REFERENCE" \
+            .
+          digest="$(jq -er '."containerimage.digest"' metadata.json)"
+          rm -f metadata.json
+          echo "digest=${digest}" >>"$GITHUB_OUTPUT"
+          echo "Published $REFERENCE"
+          echo "Immutable reference: ${REFERENCE%%:*}@${digest}"
+          {
+            echo "### Builder image published"
+            echo
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| tag (discovery) | \`${REFERENCE}\` |"
+            echo "| digest (pin this) | \`${REFERENCE%%:*}@${digest}\` |"
+          } >>"$GITHUB_STEP_SUMMARY"

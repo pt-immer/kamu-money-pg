@@ -1,7 +1,7 @@
 //! The lane pins two toolchains, and each is ONE fact spelled in many places: pgrx across
 //! manifests, Dockerfiles and the tool manifest, and Rust across `rust-toolchain.toml`,
 //! three container images, and the toolchain step of every CI job that enters the lane. That
-//! last one is bound in `scripts/test_workflows.py` rather than here, because which jobs those
+//! last one is bound in `hygiene/tests/repository.rs` rather than here, because which jobs those
 //! are is workflow policy; the version it compares against is read from the same
 //! `rust-toolchain.toml` this file derives from.
 //!
@@ -271,30 +271,6 @@ fn declared_msrv() -> ((u32, u32, u32), String) {
 #[test]
 fn the_lane_states_one_msrv_in_both_places() {
     declared_msrv();
-}
-
-#[test]
-fn the_lane_repeats_the_repository_doc_idents_exactly() {
-    // A child `clippy.toml` REPLACES the parent rather than merging with it, which is why this
-    // list exists twice. Two copies of one list is not a design, it is a pending divergence: a
-    // word added at the root would leave the lane failing `doc_markdown` on prose the rest of
-    // the repository accepts.
-    let lane = support::lane_root().join("clippy.toml");
-    let repository = support::repository_root().join("clippy.toml");
-    let idents = |path: &Path| {
-        support::manifest(path)
-            .get("doc-valid-idents")
-            .and_then(toml::Value::as_array)
-            .unwrap_or_else(|| panic!("{} must set doc-valid-idents", path.display()))
-            .clone()
-    };
-    assert_eq!(
-        idents(&lane),
-        idents(&repository),
-        "{} and {} disagree; the child replaces the parent, so the lane keeps a full copy",
-        lane.display(),
-        repository.display()
-    );
 }
 
 #[test]

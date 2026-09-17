@@ -1,0 +1,14 @@
+{
+  "name": "kamu-money-pg-docs-tooling",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Repo-local documentation linting tooling for kamu-money-pg (not published).",
+  "license": "MIT OR Apache-2.0",
+  "devDependencies": {
+    "markdownlint-cli2": "0.23.2"
+  },
+  "overrides": {
+    "js-yaml": "5.2.2",
+    "smol-toml": "^1.7.1"
+  }
+}

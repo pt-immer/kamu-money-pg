@@ -1,0 +1,62 @@
+# Spell-check configuration for kamu-public-crates (typos).
+[files]
+extend-exclude = [
+  "crates/iso3166/vendor/**",
+  # The vendored ISO 4217 register is third-party data, redistributed
+  # unmodified. Correcting a spelling inside it would make it no longer the file
+  # whose SHA-256 crates/money-core/VENDORED.md records.
+  "crates/money-core/vendor/**",
+  "target/**",
+  "**/node_modules/**",
+  ".tools/**",
+  "Cargo.lock",
+  "package-lock.json",
+]
+
+[default]
+extend-ignore-re = [
+  # W3C `traceparent` test vectors: <2 hex version>-<32 hex trace-id>-<16 hex
+  # span-id>-<2 hex flags>. The parser tests deliberately include uppercase
+  # hex and a wrong delimiter; their hex runs trip the dictionary ("ba").
+  "[0-9A-Fa-f]{2}[-_][0-9A-Fa-f]{32}-[0-9A-Fa-f]{16}-[0-9A-Fa-f]{2}",
+  # The same W3C example's span id is also asserted on its own.
+  "00f067aa0ba902b7",
+  # SQL keywords carrying English inflection, in kamu-money-pg's prose and its
+  # pg_regress comments: "really LOADed", "ERRORs still print". The dictionary
+  # splits the inflected tail off the keyword and reads the remainder as a typo
+  # ("Ded" -> "Dead", "ERRO" -> "ERROR"). Matched exactly, so a bare misspelling
+  # of either word is still caught.
+  "LOADed",
+  "ERRORs",
+  # The hyphenated `mis-` prefix ("mis-arity", "mis-typed"), which is ordinary
+  # English and appears in kamu-money-pg's wire and pg_regress sources. Scoped to
+  # the hyphenated form on purpose: a bare "mis" for "miss" remains an error.
+  '\bmis-[a-z]+',
+]
+
+[default.extend-identifiers]
+# Project/brand tokens that are not typos.
+IMMER = "IMMER"
+# kamu-snap-response migration docs reference the OLD v1.x enum variant name
+# `Unathorized` (the historical typo) when documenting its rename to
+# `Error::Unauthorized`. Keep the deliberate historical reference verbatim.
+Unathorized = "Unathorized"
+
+[default.extend-words]
+# Domain vocabulary from kamu-logging's OpenTelemetry / W3C trace-context support.
+otlp = "otlp"
+traceparent = "traceparent"
+# See the extend-identifiers note above — the historical `Unathorized` typo is
+# referenced on purpose in kamu-snap-response's CHANGELOG/README migration table.
+Unathorized = "Unathorized"
+# The misspelling is upstream's, in the source URL SIX Group publishes for the
+# ISO 4217 register. Quoted verbatim in kamu-money-core's VENDORED.md so the
+# provenance link actually resolves.
+currrency = "currrency"
+# The Kuwaiti dinar's minor unit. 1 KWD = 1000 fils, which is why KWD is one of
+# the seven ISO 4217 codes with a settlement exponent of 3.
+fils = "fils"
+# Recovery Time Objective, beside its sibling RPO. Disaster-recovery vocabulary in
+# kamu-money-pg's YugabyteDB restore script and runbook, where both are named as
+# the platform's responsibility rather than this repository's.
+RTO = "RTO"

@@ -36,8 +36,8 @@ cd "$(dirname "$0")/../.."   # repo root
 # shellcheck source=kamu-money-pg/yb/workspace-lock.sh
 source "$(dirname "$0")/workspace-lock.sh"
 workspace_lock "$(basename "$0")" || exit 1
-# shellcheck source=scripts/docker-core-context.sh
-source ./scripts/docker-core-context.sh
+# shellcheck source=kamu-money-pg/yb/node-limits.sh
+source ./kamu-money-pg/yb/node-limits.sh
 
 YB_TAG="${1:-}"
 PG_MAJOR="${2:-18}"
@@ -72,10 +72,12 @@ trap cleanup EXIT INT TERM HUP
 
 echo "=== YugabyteDB with kmoney baked in: $NODE_IMAGE (base $YB_REF) ==="
 docker network create "$NET" >/dev/null
-docker run -d --name "$NODE" --network "$NET" \
+docker run --memory "$YB_NODE_MEM" --memory-swap "$YB_NODE_MEM" -d --name "$NODE" --network "$NET" \
     --label "${LABEL}" \
     --label "kamu-money-pg.revision=$(git rev-parse --short HEAD 2>/dev/null || echo nogit)" \
     "$NODE_IMAGE" bin/yugabyted start --background=false \
+    --tserver_flags="memory_limit_hard_bytes=$YB_TSERVER_MEM_BYTES" \
+    --master_flags="memory_limit_hard_bytes=$YB_MASTER_MEM_BYTES" \
         --advertise_address="$NODE" >/dev/null
 
 # READINESS IS A QUERY THAT ANSWERED, not an address that resolved -- the same rule
@@ -97,7 +99,7 @@ echo "=== building the client image (cargo + this workspace, PG${PG_MAJOR}) ==="
 # identity this build produced rather than a name someone else can repoint. A tag of its OWN,
 # never `kamu-money-pg:pg18`, which belongs to test-matrix.sh and carries a label `bench-pg` reads.
 IIDFILE="$(mktemp)"
-docker build "${KMONEY_CORE_DOCKER_ARGS[@]}" \
+docker build \
     -f kamu-money-pg/Dockerfile --build-arg "PG_MAJOR=${PG_MAJOR}" \
     --label "${LABEL}" --iidfile "${IIDFILE}" -t "kamu-money-pg-ybdriver:pg${PG_MAJOR}" . >&2
 CLIENT_IMAGE="$(cat "${IIDFILE}")"
@@ -118,7 +120,7 @@ docker run --rm --network "$NET" --label "${LABEL}" \
     # unset, so "cargo test succeeded" alone would let this print OK while proving nothing. The
     # url is set above, so a skip here means something unset it, and that must be loud.
     CORE_MANIFEST="$(./scripts/resolve-core-manifest.sh)"
-    cargo test --manifest-path "$CORE_MANIFEST" \
+    cargo test --locked --manifest-path "$CORE_MANIFEST" \
         --features postgres,sqlx --test pg_native_column \
         -- --nocapture --test-threads=1 2>&1 | tee /tmp/yb-driver.out
 

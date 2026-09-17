@@ -27,7 +27,7 @@ license = "MIT OR Apache-2.0"
 # Cargo packages do not carry `[patch]`; publishing would resolve an incompatible
 # crates.io pgrx. This lane is therefore never publishable.
 publish = false
-repository = "https://github.com/pt-immer/kamu-public-crates"
+repository = "https://github.com/pt-immer/kamu-money-pg"
 # pgrx 0.19.2 requires Rust 1.96.
 rust-version = "1.96"
 

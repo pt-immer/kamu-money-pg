@@ -1,0 +1,62 @@
+name: Read pinned versions
+description: >-
+  Publish .config/dev-tools.json to a job so it references the pinned versions instead of
+  restating them. Requires the repository to be checked out.
+
+outputs:
+  manifest:
+    description: >-
+      The pinned-version manifest, normalised only in its trailing newline. A job indexes
+      the pin it needs out of this rather than reading an output named after it, so a pin
+      added to the manifest is reachable without an output and a republish being added to
+      carry it.
+    value: ${{ steps.read.outputs.manifest }}
+  builder_image:
+    description: >-
+      The pgrx build environment the lane's compiler-only jobs run inside, pinned by digest.
+    value: ${{ steps.read.outputs.builder_image }}
+
+runs:
+  using: composite
+  steps:
+    - id: read
+      shell: bash
+      env:
+        # Anchored on the workspace rather than the working directory: a job that checks out
+        # under a path, or sets a working-directory default, would otherwise reach for a file
+        # that is not there and fail as an opaque non-zero step.
+        MANIFEST: ${{ github.workspace }}/.config/dev-tools.json
+        BUILDER: ${{ github.workspace }}/.config/builder-image
+      run: |
+        set -euo pipefail
+        if [ ! -r "$MANIFEST" ]; then
+          echo "::error::read-dev-tools: $MANIFEST is not readable; check the repository out first"
+          exit 1
+        fi
+        if [ ! -r "$BUILDER" ]; then
+          echo "::error::read-dev-tools: $BUILDER is not readable; check the repository out first"
+          exit 1
+        fi
+        # The manifest is pull-request-controlled content. A fixed delimiter lets a line equal to
+        # it close the heredoc early and write arbitrary further outputs, which every job reads.
+        delimiter="KAMU_DEV_TOOLS_$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+        if grep -qxF -- "$delimiter" "$MANIFEST"; then
+          echo "::error::read-dev-tools: $MANIFEST contains the generated delimiter"
+          exit 1
+        fi
+        {
+          echo "manifest<<$delimiter"
+          # Normalised, not cat: a manifest saved without a trailing newline would run
+          # into the delimiter line and leave the heredoc unterminated.
+          printf '%s\n' "$(cat "$MANIFEST")"
+          echo "$delimiter"
+        } >>"$GITHUB_OUTPUT"
+
+        # Pull-request-controlled: whitespace stripped so a newline cannot write further outputs.
+        reference="$(grep -vE '^[[:space:]]*(#|$)' "$BUILDER" | head -n 1 | tr -d '[:space:]')"
+        case "$reference" in
+          *@sha256:*) ;;
+          "") echo "::error::read-dev-tools: $BUILDER names no image"; exit 1 ;;
+          *) echo "::error::read-dev-tools: $BUILDER must pin by digest, got $reference"; exit 1 ;;
+        esac
+        echo "builder_image=$reference" >>"$GITHUB_OUTPUT"

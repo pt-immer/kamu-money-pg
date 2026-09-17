@@ -24,7 +24,7 @@ struct Outcome {
 /// Install a `docker` that runs `body` and exits `code`, then invoke the check the way its callers
 /// do — under `set -euo pipefail`, which is what made the original failure silent.
 fn with_docker(label: &str, body: &str, code: i32) -> Outcome {
-    let lane = support::repository_root().join("extensions/money-pg");
+    let lane = support::lane_root();
     let work = std::env::temp_dir().join(format!("kmoney-cache-exporter-{label}"));
     let bin = work.join("bin");
     let _ = fs::remove_dir_all(&work);

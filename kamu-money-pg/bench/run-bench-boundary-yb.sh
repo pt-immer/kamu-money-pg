@@ -32,8 +32,6 @@ read -r -a NUMA_ARGS <<< "$(numa_docker_args)"
 # shellcheck source=kamu-money-pg/yb/workspace-lock.sh
 source "$(dirname "$0")/../yb/workspace-lock.sh"
 workspace_lock "$(basename "$0")" || exit 1
-# shellcheck source=scripts/docker-core-context.sh
-source ./scripts/docker-core-context.sh
 
 TAG_ARG="${1:-}"
 # PID AND ENTROPY AS WELL AS THE TIMESTAMP. Second resolution alone means two runs started in the
@@ -81,7 +79,7 @@ REVISION="$(git rev-parse HEAD 2>/dev/null || echo UNKNOWN)"
 IIDFILE="$(mktemp)"
 trap 'rm -f "$IIDFILE"; cleanup' EXIT INT TERM HUP
 echo "boundary-yb: building the probe image (this compiles the extension from source) ..." | tee -a "$OUT"
-docker build "${KMONEY_CORE_DOCKER_ARGS[@]}" \
+docker build \
     -f kamu-money-pg/yb/Dockerfile --target boundary-node \
     --build-arg YB_IMAGE="$YB_REF" \
     --build-arg EXTRA_FEATURES=boundary-probe \

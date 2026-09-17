@@ -24,8 +24,6 @@
 # is recorded against it when the image is published.
 set -euo pipefail
 cd "$(dirname "$0")/../.."   # repo root
-# shellcheck source=scripts/docker-core-context.sh
-source ./scripts/docker-core-context.sh
 
 BASE_REF="${1:-}"
 if [ -z "$BASE_REF" ]; then
@@ -58,7 +56,7 @@ cleanup() { rm -f "$IID"; return 0; }
 trap cleanup EXIT INT TERM HUP
 
 echo "node-image: building kmoney-yugabyte:$VERSION on $BASE_REF" >&2
-docker build "${KMONEY_CORE_DOCKER_ARGS[@]}" \
+docker build \
     -f kamu-money-pg/yb/Dockerfile --target node \
     --build-arg YB_IMAGE="$BASE_REF" --iidfile "$IID" \
     --build-arg KMONEY_CACHE_ID="${KMONEY_CACHE_ID:-shared}" \

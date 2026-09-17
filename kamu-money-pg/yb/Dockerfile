@@ -6,8 +6,8 @@
 #
 # The three-symbol adaptation now lives in the pgrx fork the workspace root patches in
 # (pgrx-yugabytedb, tag v0.19.2-yb.1), behind its `yb-pg15` feature -- it is no longer vendored
-# and textually patched here. Build through `just pg yb-build`; the recipe supplies
-# the lane context plus the normalized kamu-money-core named context.
+# and textually patched here. Build through `just yb-build`; the repository is
+# the only build context and Cargo.lock pins kamu-money-core.
 ARG YB_IMAGE=yugabytedb/yugabyte:2025.2.5.1-b1
 FROM ${YB_IMAGE} AS deps
 USER root
@@ -15,9 +15,9 @@ USER root
 # YB's base is UBI/CentOS-family; use dnf or yum. libclang is needed by pgrx's
 # bindgen against YB's server headers.
 RUN (command -v dnf >/dev/null 2>&1 && \
-     dnf install -y curl gcc gcc-c++ make clang clang-devel llvm-libs \
+     dnf install -y jq curl gcc gcc-c++ make clang clang-devel llvm-libs \
        bison flex readline-devel zlib-devel libicu-devel openssl-devel ca-certificates \
-     || yum install -y curl gcc gcc-c++ make clang clang-devel llvm-libs \
+     || yum install -y jq curl gcc gcc-c++ make clang clang-devel llvm-libs \
        bison flex readline-devel zlib-devel libicu-devel openssl-devel ca-certificates)
 
 # Optional TLS-inspecting-proxy trust anchors, same rule as kamu-money-pg/Dockerfile:
@@ -57,14 +57,7 @@ RUN ln -sfn /root/.pgrx /work/.pgrx
 COPY kamu-money-pg/yb/probe-yb-abi.sh kamu-money-pg/yb/
 RUN chmod +x kamu-money-pg/yb/probe-yb-abi.sh && ./kamu-money-pg/yb/probe-yb-abi.sh
 
-# Keep the lane as the primary context. A second context carries only Cargo's
-# normalized kamu-money-core package; release proof disables its Cargo patch.
-#
-# This lands ABOVE the dependency layer so that the layer and the package step compile the same
-# graph. Resolving `kamu-money-core` one way here and the other way there would make the cached
-# layer a lie.
-ARG KMONEY_USE_LOCAL_CORE=1
-COPY --from=kamu-money-core . /opt/kamu-money-core
+# The repository is the only Docker context. Cargo.lock pins registry core.
 
 # --- dependency layer ---------------------------------------------------------------------------
 # Manifests, lockfile and Cargo configuration only, with a stub source tree standing in for the
@@ -78,7 +71,7 @@ COPY --from=kamu-money-core . /opt/kamu-money-core
 # dependency graph every run. The two are mutually exclusive on the same path -- a mount over
 # /work/target masks whatever a layer baked there -- so this replaces them rather than joining them.
 #
-# `--release`, because `cargo pgrx package` builds the release profile and `[profile.release]` sets
+# `--release`, because `./scripts/pgrx.sh package` builds the release profile and `[profile.release]` sets
 # `lto = "fat"`, which changes how every dependency rlib is compiled. A dev-profile layer would be
 # reused by nothing.
 #
@@ -92,7 +85,7 @@ COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY .cargo/ .cargo/
 COPY kamu-money-pg/Cargo.toml kamu-money-pg/build.rs kamu-money-pg/
 COPY hygiene/Cargo.toml hygiene/
-COPY scripts/assert-core-resolution.sh scripts/
+COPY scripts/assert-core-resolution.sh scripts/resolve-core-manifest.sh scripts/
 
 # The release proof's empty-cache guarantee, and the reason this ARG is EXPANDED in the RUN below
 # rather than merely declared beside it: BuildKit keys a RUN on its expanded command, so a unique
@@ -103,24 +96,13 @@ COPY scripts/assert-core-resolution.sh scripts/
 # which is why `hygiene/tests/packaging.rs` asserts the reference below, not just the declaration.
 ARG KMONEY_CACHE_ID=shared
 RUN <<'SETUP' bash -e
-    case "${KMONEY_USE_LOCAL_CORE}" in
-      0) echo "kamu-money-core: resolving from crates.io"; WANT=registry ;;
-      1) printf '\n[patch.crates-io]\nkamu-money-core = { path = "/opt/kamu-money-core" }\n' \
-           >> /work/.cargo/config.toml; WANT=local ;;
-      *) echo "KMONEY_USE_LOCAL_CORE must be 0 or 1" >&2; exit 2 ;;
-    esac
     mkdir -p kamu-money-pg/src hygiene/src
     : > kamu-money-pg/src/lib.rs
     : > hygiene/src/lib.rs
-    # Appending the patch is not the same as Cargo using it. Fail here, before a compile whose
-    # result would silently describe the published crate rather than this tree.
-    #
-    # BELOW the stubs, because Cargo refuses to load a workspace member whose lib target has no
-    # file -- and an assertion that cannot resolve anything refuses every lockfile, correct ones
-    # included, which is a guard that proves nothing while looking strict.
-    bash scripts/assert-core-resolution.sh "$WANT"
+    # Resolve after the stub targets exist; refuse stale locks before compiling.
+    bash scripts/assert-core-resolution.sh
     echo "dependency scope: ${KMONEY_CACHE_ID}"
-    cargo build --release -p kamu-money-pg --no-default-features --features "pg15,yb-pg15"
+    cargo build --release --locked -p kamu-money-pg --no-default-features --features "pg15,yb-pg15"
     rm -rf kamu-money-pg/src hygiene/src
 SETUP
 
@@ -133,21 +115,8 @@ FROM deps AS build
 # neither the dependencies just compiled nor the PGRX_HOME symlink.
 COPY . .
 
-# Again, and not redundantly: the copy above restored the tracked `.cargo/config.toml`, taking the
-# patch block with it. Without this the package step would resolve `kamu-money-core` from the
-# registry while the layer beneath it was built against the local path.
-#
-# The assertion is repeated for the same reason the append is: this is the resolution the SHIPPED
-# library is compiled against, and losing the patch here would be invisible in the artifact.
-ARG KMONEY_USE_LOCAL_CORE=1
-RUN case "${KMONEY_USE_LOCAL_CORE}" in \
-      0) echo "kamu-money-core: resolving from crates.io"; WANT=registry ;; \
-      1) printf '\n[patch.crates-io]\nkamu-money-core = { path = "/opt/kamu-money-core" }\n' \
-           >> /work/.cargo/config.toml; WANT=local ;; \
-      *) echo "KMONEY_USE_LOCAL_CORE must be 0 or 1" >&2; exit 2 ;; \
-    esac; \
-    bash scripts/assert-core-resolution.sh "$WANT"
-ENV KMONEY_USE_LOCAL_CORE=${KMONEY_USE_LOCAL_CORE}
+# Recheck the final source tree against the committed lockfile.
+RUN bash scripts/assert-core-resolution.sh
 
 # Package kamu-money-pg (PG15) against YB's own pg_config.
 #
@@ -166,7 +135,7 @@ ENV KMONEY_USE_LOCAL_CORE=${KMONEY_USE_LOCAL_CORE}
 # measured (kamu-money-pg/bench/boundary/). They must never reach a deployable node image, and
 # with an empty default they cannot arrive by accident -- a caller has to name them.
 ARG EXTRA_FEATURES=
-RUN cargo pgrx package -p kamu-money-pg \
+RUN ./scripts/pgrx.sh package -p kamu-money-pg \
       --no-default-features --features "pg15,yb-pg15${EXTRA_FEATURES:+,$EXTRA_FEATURES}" \
       -c /home/yugabyte/postgres/bin/pg_config
 
@@ -213,7 +182,7 @@ COPY --from=build /out/ /
 # connections, because `module_pathname = 'kmoney'` means live backends keep the old library
 # loaded. See RUNBOOK.md, "Extension version changes".
 #
-#   just pg yb-node-image
+#   just yb-node-image
 FROM ${YB_IMAGE} AS node
 COPY --from=build /out/kmoney.so             /home/yugabyte/postgres/lib/kmoney.so
 COPY --from=build /out/kmoney.control        /home/yugabyte/postgres/share/extension/
@@ -235,7 +204,7 @@ RUN set -eux; \
 # =================================================================================================
 # THE BOUNDARY-PROBE NODE. A MEASUREMENT ARTEFACT, NEVER A DEPLOYABLE ONE.
 #
-#   just pg bench-boundary-yb
+#   just bench-boundary-yb
 #
 # WHY IT NEEDS ITS OWN TARGET. The probe compares a null `#[pg_extern]` against a null C function
 # of the same signature, and the subtraction only means anything if BOTH were compiled against

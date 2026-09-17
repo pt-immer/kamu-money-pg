@@ -5,7 +5,7 @@
 #   kamu-money-pg/yb/run-yb.sh [yb-image] [artifact-dir] [out-file]
 #
 # Prereq: kamu-money-pg/yb/out/{kmoney.so,kmoney.control,kmoney--*.sql} built by
-#   just pg yb-build
+#   just yb-build
 set -euo pipefail
 cd "$(dirname "$0")/../.."   # repo root
 

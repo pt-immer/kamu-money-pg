@@ -6,3 +6,7 @@ target
 # Container-suite output is regenerated and can contain database data and
 # extracted extension artifacts.
 kamu-money-pg/yb/out
+
+.git
+.tools
+node_modules

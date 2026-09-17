@@ -2,7 +2,7 @@
 # Install `kmoney`, start pgrx's PostgreSQL, and run the cost benchmark. Runs INSIDE
 # kamu-money-pg:pg<major>; driven by run-bench-pg.sh. Never a gate.
 #
-# WHY THIS IS A SEPARATE FILE. The image's own CMD is `cargo pgrx test`, which builds, installs,
+# WHY THIS IS A SEPARATE FILE. The image's own CMD is `./scripts/pgrx.sh test`, which builds, installs,
 # starts a server, runs the suite and tears it all down -- so there is no server to connect to
 # from outside, and no long-lived one to benchmark against. This does the same setup and then
 # stops, leaving a server up. A file rather than a `docker exec bash -c '<long string>'` because
@@ -15,9 +15,9 @@ BIN="$(sed -n "s/^pg${PG} = \"\\(.*\\)\\/pg_config\"/\\1/p" ~/.pgrx/config.toml)
 DATA="$HOME/.pgrx/data-${PG}"
 PORT="288${PG}"
 
-# Performance results require an optimized extension; `cargo pgrx install` otherwise defaults
+# Performance results require an optimized extension; `./scripts/pgrx.sh install` otherwise defaults
 # to a debug build.
-cargo pgrx install --release --no-default-features --features "pg${PG}" \
+./scripts/pgrx.sh install --release --no-default-features --features "pg${PG}" \
     --pg-config "$BIN/pg_config" >&2
 
 # AND VERIFIED, because `--release` above is one word away from being deleted again by somebody

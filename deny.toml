@@ -1,8 +1,4 @@
-# Dependency policy for the excluded PostgreSQL extension workspace.
-#
-# This file is intentionally separate from the repository-root policy. The lane
-# resolves pgrx from one reviewed public fork; published crates must continue to
-# reject every Git dependency.
+# Dependency policy for the unpublished PostgreSQL/YugabyteDB extension.
 
 [graph]
 all-features = true

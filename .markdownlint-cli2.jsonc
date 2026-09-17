@@ -1,0 +1,28 @@
+{
+  // House Markdown rules for kamu-public-crates docs (markdownlint-cli2).
+  "config": {
+    "default": true,
+    // Prose and tables wrap naturally; don't enforce a hard line length.
+    "MD013": false,
+    // Badges and shields are inline HTML/images.
+    "MD033": false,
+    // Changelogs legitimately repeat headings (Added/Changed) across versions.
+    "MD024": { "siblings_only": true },
+    // Don't force monospace pipe-alignment on tables with long badge-URL cells.
+    "MD060": false
+  },
+  "globs": ["**/*.md"],
+  "ignores": [
+    // `**/target/**`, not `target/**`: the root-anchored form misses a nested
+    // workspace's build output, and `target/doc/` holds the
+    // font licences rustdoc bundles — six markdownlint errors in generated files
+    // nobody wrote. Unlike typos, markdownlint-cli2 does not honour .gitignore.
+    "**/target/**",
+    "**/node_modules/**",
+    ".tools/**",
+    // Git-ignored agent session buffers (remember-hook runtime files).
+    ".remember/**",
+    // Git-ignored graphify knowledge-graph output (wiki/report markdown).
+    "graphify-out/**"
+  ]
+}

@@ -24,18 +24,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-# cargo-pgrx launches its own Cargo subprocesses and does not forward outer `--config` flags.
-# Point its standard `CARGO` hook at a proxy that injects the host-only sibling patch into each
-# subprocess. Calling cargo-pgrx directly avoids Cargo overwriting that hook when it starts the
-# external subcommand.
-KMONEY_CORE_PATH="$(cd ../../../crates/money-core && pwd -P)"
-export KMONEY_CORE_PATH
-export RUSTUP_TOOLCHAIN
-RUSTUP_TOOLCHAIN="$(rustup show active-toolchain | awk '{print $1}')"
-export KMONEY_REAL_CARGO
-KMONEY_REAL_CARGO="$(rustup which cargo)"
-CARGO="$(cd ../scripts && pwd -P)/cargo-with-core-patch.sh"
-export CARGO
+../scripts/assert-core-resolution.sh
 
 PG="${1:-18}"
 EXPECT="${2:-}"
@@ -59,8 +48,8 @@ cleanup() { rm -rf "$WORK"; return 0; }
 trap cleanup EXIT INT TERM HUP
 export CARGO_TARGET_DIR="$WORK/target"
 
-if ! cargo-pgrx pgrx schema "pg${PG}" "${FEATURE_ARGS[@]}" --out "$WORK/schema.sql" >"$WORK/gen.log" 2>&1; then
-    echo "schema-hash: 'cargo pgrx schema pg${PG} ${FEATURES}' failed" >&2
+if ! ../scripts/pgrx.sh schema "pg${PG}" "${FEATURE_ARGS[@]}" --out "$WORK/schema.sql" >"$WORK/gen.log" 2>&1; then
+    echo "schema-hash: '../scripts/pgrx.sh schema pg${PG} ${FEATURES}' failed" >&2
     tail -30 "$WORK/gen.log" >&2
     exit 1
 fi

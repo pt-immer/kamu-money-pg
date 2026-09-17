@@ -27,7 +27,7 @@ const ASSERT: &str = "./kamu-money-pg/yb/assert-battery.sh";
 
 fn battery_output() -> PathBuf {
     let named = std::env::var("KMONEY_BATTERY_OUTPUT")
-        .expect("KMONEY_BATTERY_OUTPUT must name a battery output; run `just pg yb-selftest`");
+        .expect("KMONEY_BATTERY_OUTPUT must name a battery output; run `just yb-selftest`");
     // The lane's own paths are written relative to the lane root, which is not a test process's
     // working directory.
     let named = PathBuf::from(named);
@@ -96,14 +96,14 @@ fn assertion_table() -> Vec<Assertion> {
 
 /// Without this, every rejection below could be an oracle that refuses everything.
 #[test]
-#[ignore = "needs a battery output; run `just pg yb-selftest`"]
+#[ignore = "needs a battery output; run `just yb-selftest`"]
 fn a_real_battery_output_passes_every_assertion() {
     let outcome = assert_battery(&battery_output(), "selftest-positive", Some("0"));
     assert_eq!(0, outcome.status, "a real battery output was REJECTED: {}", outcome.output());
 }
 
 #[test]
-#[ignore = "needs a battery output; run `just pg yb-selftest`"]
+#[ignore = "needs a battery output; run `just yb-selftest`"]
 fn structural_corruptions_are_rejected() {
     let source = battery_output();
     let text = read(&source);
@@ -131,7 +131,7 @@ fn structural_corruptions_are_rejected() {
 }
 
 #[test]
-#[ignore = "needs a battery output; run `just pg yb-selftest`"]
+#[ignore = "needs a battery output; run `just yb-selftest`"]
 fn every_table_assertion_rejects_its_own_mutation() {
     let source = battery_output();
     let original = read(&source).lines().count();

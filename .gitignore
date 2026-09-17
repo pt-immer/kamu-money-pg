@@ -19,3 +19,7 @@
 # files but did not ignore them either, so the first YugabyteDB run in a fresh
 # checkout would have offered a few hundred logs to `git add -A`.
 kamu-money-pg/yb/out/
+
+/target/
+/.tools/
+/node_modules/
