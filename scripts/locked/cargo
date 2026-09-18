@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Keep every Cargo resolution spawned by pgrx on the committed lockfile.
+set -euo pipefail
+: "${KMONEY_REAL_CARGO:?pgrx.sh must provide the real Cargo executable}"
+command="$1"
+shift
+case "$command" in
+    build | check | metadata | test | rustc)
+        exec "$KMONEY_REAL_CARGO" "$command" --locked "$@"
+        ;;
+    *) exec "$KMONEY_REAL_CARGO" "$command" "$@" ;;
+esac

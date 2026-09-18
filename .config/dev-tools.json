@@ -1,0 +1,51 @@
+{
+  "rust": {
+    "primary": "1.96.0",
+    "msrv": "1.96.0",
+    "primary_components": [
+      "clippy",
+      "rustfmt",
+      "rust-src"
+    ]
+  },
+  "cargo_tools": {
+    "just": {
+      "version": "1.57.0"
+    },
+    "taplo-cli": {
+      "binary": "taplo",
+      "version": "0.10.0",
+      "exact": "its formatting is the verdict, so a different version disagrees with CI"
+    },
+    "typos-cli": {
+      "binary": "typos",
+      "version": "1.48.0",
+      "exact": "its findings are the verdict, so a different version disagrees with CI"
+    },
+    "cargo-deny": {
+      "version": "0.20.2",
+      "exact": "its findings are the verdict, and its advisory and ban sets move between releases"
+    },
+    "cargo-nextest": {
+      "version": "0.9.140"
+    }
+  },
+  "node_tools": {
+    "markdownlint-cli2": {
+      "version": "0.23.2",
+      "exact": "its findings are the verdict, so a different version disagrees with CI"
+    }
+  },
+  "system_tools": {
+    "shellcheck": {
+      "version": "0.11.0",
+      "exact": "its findings are the verdict, so a different version disagrees with CI"
+    }
+  },
+  "ci_only_tools": {
+    "cargo-pgrx": {
+      "version": "0.19.2",
+      "exact": "must equal the pgrx the lane builds against, or the extension will not link"
+    }
+  }
+}

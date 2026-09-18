@@ -1,0 +1,42 @@
+[workspace]
+# `hygiene` is the pgrx-free crate holding repository guards and the safe payload harness.
+# Keeping it separate avoids compiling pgrx for policy tests.
+members = ["kamu-money-pg", "hygiene"]
+# A local pgrx checkout is its own workspace.
+exclude = ["vendor"]
+resolver = "3"
+
+# The committed patch is unconditional because Cargo validates `pgrx/yb-pg15`
+# during resolution even when disabled. The public HTTPS fork is upstream 0.19.2
+# plus feature-gated YugabyteDB adaptations. Package names and version stay
+# compatible with cargo-pgrx; the tag and lockfile select the revision.
+#
+# To try an unpushed fork revision, check it out at `vendor/pgrx-yugabytedb` and
+# temporarily use path patches below.
+[patch.crates-io]
+pgrx = { git = "https://github.com/pt-immer/pgrx-yugabytedb", tag = "v0.19.2-yb.1" }
+pgrx-pg-sys = { git = "https://github.com/pt-immer/pgrx-yugabytedb", tag = "v0.19.2-yb.1" }
+
+[workspace.package]
+authors = [
+  "PT. IMMER Contributors <https://github.com/pt-immer>",
+  "PT. IMMER Engineers <https://github.com/orgs/pt-immer/teams/engineering>",
+]
+edition = "2024"
+license = "MIT OR Apache-2.0"
+# Cargo packages do not carry `[patch]`; publishing would resolve an incompatible
+# crates.io pgrx. This lane is therefore never publishable.
+publish = false
+repository = "https://github.com/pt-immer/kamu-money-pg"
+# pgrx 0.19.2 requires Rust 1.96.
+rust-version = "1.96"
+
+# pgrx maps PostgreSQL errors through unwinding; abort would kill the backend.
+[profile.dev]
+panic = "unwind"
+
+[profile.release]
+panic = "unwind"
+opt-level = 3
+lto = "fat"
+codegen-units = 1

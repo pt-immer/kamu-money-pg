@@ -1,0 +1,10 @@
+# Ordinary hygiene tests. Database-backed controls are explicitly selected by their recipes.
+[profile.default]
+status-level = "fail"
+final-status-level = "flaky"
+failure-output = "immediate"
+retries = 0
+
+[profile.ci]
+fail-fast = false
+failure-output = "immediate-final"

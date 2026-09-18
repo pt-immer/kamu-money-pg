@@ -1,0 +1,217 @@
+name: On PR Synced
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+permissions:
+  contents: read
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -Dwarnings
+  NEXTEST_PROFILE: ci
+jobs:
+  changes:
+    name: read tool pins
+    runs-on: ubuntu-latest
+    outputs:
+      manifest: ${{ steps.pins.outputs.manifest }}
+      builder_image: ${{ steps.pins.outputs.builder_image }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - id: pins
+        uses: ./.github/actions/read-dev-tools
+
+  deny-money-pg:
+    name: cargo-deny (kamu-money-pg lane)
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2
+        with:
+          tool: just@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['just'].version }},cargo-deny@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['cargo-deny'].version }}
+      - run: just deny
+
+
+  test-money-pg-offline:
+    name: test (kamu-money-pg hygiene guards)
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable branch, 2026-07-16
+        with:
+          toolchain: ${{ fromJSON(needs.changes.outputs.manifest).rust.primary }}
+      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2
+        with:
+          tool: just@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['just'].version }},cargo-nextest@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['cargo-nextest'].version }}
+      - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+        with:
+          workspaces: .
+      # This reaches the lane's negative controls too: they are tests in the hygiene crate, so a
+      # control cannot be unhooked from the check that runs it without being deleted outright.
+      - run: just test-hygiene
+
+
+  miri-money-pg:
+    name: miri (kamu-money-pg safe payload)
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable branch, 2026-07-16
+        with:
+          toolchain: nightly
+          components: miri
+      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2
+        with:
+          tool: just@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['just'].version }}
+      - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+        with:
+          workspaces: .
+      - run: just miri-payload
+
+
+  lint-money-pg:
+    name: clippy (kamu-money-pg)
+    needs: changes
+    runs-on: ubuntu-latest
+    # The toolchain, cargo-pgrx, the PostgreSQL major and an initialised PGRX_HOME all come from
+    # the image, which is where they are already stated. Provisioning them here as well was a
+    # second copy of the lane's Dockerfile written in YAML, and it named the major four times.
+    container:
+      image: ${{ needs.changes.outputs.builder_image }}
+      # The workspace is mounted root-owned, and the image's own user is not root. Everything the
+      # job runs -- cargo, cargo-pgrx, the initialised PGRX_HOME -- is readable either way.
+      options: --user root
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2
+        with:
+          tool: just@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['just'].version }}
+      - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+        with:
+          workspaces: .
+      - name: Point the lane at the image's initialised PGRX_HOME
+        # `.cargo/config.toml` forces PGRX_HOME to `.pgrx` relative to itself, which resolves
+        # inside the checkout rather than to the home the image populated.
+        run: ln -sfn /home/pgrx/.pgrx .pgrx
+      - run: just lint
+
+
+  docs-money-pg:
+    name: docs (kamu-money-pg)
+    needs: [changes, lint-money-pg]
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.changes.outputs.builder_image }}
+      options: --user root
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2
+        with:
+          tool: just@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['just'].version }},cargo-nextest@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['cargo-nextest'].version }}
+      - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+        with:
+          workspaces: .
+      - name: Point the lane at the image's initialised PGRX_HOME
+        run: ln -sfn /home/pgrx/.pgrx .pgrx
+      # This runs `doc-pg` itself, both against a probed tree and against a clean one, so a
+      # separate `doc-pg` step here would be a second full rustdoc pass proving nothing more.
+      - run: just doc-gate-selftest
+
+
+  test-money-pg-matrix:
+    name: test (kamu-money-pg PG${{ matrix.pg }})
+    needs: [changes, lint-money-pg]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        pg: [15, 16, 17, 18]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2
+        with:
+          tool: just@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['just'].version }}
+      # The PG matrix runs in parallel; retain local dependency layers without CI export.
+      - run: just test-pg "${{ matrix.pg }}"
+
+
+  test-money-pg-yb:
+    name: test (kamu-money-pg YugabyteDB)
+    needs: [changes, lint-money-pg]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2
+        with:
+          tool: just@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['just'].version }}
+      # Exporting a build cache needs the docker-container driver; the default one cannot.
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      # Cache inputs match the files copied before the dependency compile.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: /tmp/kmoney_buildx
+          key: >-
+            buildx-money-pg-yb-${{ hashFiles(
+            'Cargo.lock',
+            'Cargo.toml',
+            'rust-toolchain.toml',
+            '.cargo/config.toml',
+            'kamu-money-pg/Cargo.toml',
+            'kamu-money-pg/build.rs',
+            'kamu-money-pg/yb/Dockerfile',
+            'kamu-money-pg/yb/probe-yb-abi.sh',
+            'kamu-money-pg/yb/YB-PINNED.txt',
+            'scripts/assert-core-resolution.sh',
+            'scripts/resolve-core-manifest.sh',
+            'hygiene/Cargo.toml') }}
+          restore-keys: |
+            buildx-money-pg-yb-
+      - run: just test-yb-regress
+        env:
+          KMONEY_BUILD_CACHE_DIR: /tmp/kmoney_buildx
+
+
+  lint-repository:
+    runs-on: ubuntu-latest
+    needs: changes
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable branch, 2026-07-16
+        with:
+          toolchain: ${{ fromJSON(needs.changes.outputs.manifest).rust.primary }}
+          components: rustfmt
+      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2
+        with:
+          tool: just@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['just'].version }},taplo-cli@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['taplo-cli'].version }},typos-cli@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['typos-cli'].version }},shellcheck@${{ fromJSON(needs.changes.outputs.manifest).system_tools.shellcheck.version }}
+      - run: npm ci
+      - run: just lint-all
+
+  test-drivers:
+    runs-on: ubuntu-latest
+    needs: [changes, lint-money-pg]
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable branch, 2026-07-16
+        with:
+          toolchain: ${{ fromJSON(needs.changes.outputs.manifest).rust.primary }}
+      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2
+        with:
+          tool: just@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['just'].version }},cargo-nextest@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['cargo-nextest'].version }}
+      - run: just test-yb
+      - run: just test-pg-driver
+      - run: just test-yb-driver
+      - run: just yb-image-selftest
+
+  ci-success:
+    name: ci-success
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    needs: [changes, deny-money-pg, test-money-pg-offline, miri-money-pg, lint-money-pg, docs-money-pg, test-money-pg-matrix, test-money-pg-yb, lint-repository, test-drivers]
+    steps:
+      - uses: re-actors/alls-green@05ac9388f0aebcb5727afa17fcccfecd6f8ec5fe # release/v1
+        with:
+          jobs: ${{ toJSON(needs) }}

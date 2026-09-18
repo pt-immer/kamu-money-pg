@@ -1,0 +1,35 @@
+name: On Release Published
+on:
+  release:
+    types: [published]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - id: pins
+        uses: ./.github/actions/read-dev-tools
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable branch, 2026-07-16
+        with:
+          toolchain: ${{ fromJSON(steps.pins.outputs.manifest).rust.primary }}
+      - name: Verify extension release identity
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$TAG" =~ ^kamu-money-pg-v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.+-]+)?)$ ]]; then
+            echo "::error::unexpected extension release tag: $TAG"
+            exit 1
+          fi
+          version="${BASH_REMATCH[1]}"
+          actual="$(cargo metadata --locked --no-deps --format-version 1 |
+            jq -er 'first(.packages[] | select(.name == "kamu-money-pg") | .version)')"
+          test "$actual" = "$version"
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "${TAG}^{commit}" origin/main
+          ./scripts/assert-core-resolution.sh
+          echo "Verified $TAG. This extension is not a crates.io package."

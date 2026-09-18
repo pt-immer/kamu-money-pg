@@ -1,0 +1,67 @@
+# Host builds require `cargo pgrx init`; container recipes need no host pgrx state.
+# pgrx-pg-sys's build script reads ~/.pgrx/config.toml to find pg_config; without it the build
+# fails with "failed to run custom build command for pgrx-pg-sys". The supported path is the
+# container (`./kamu-money-pg/test-matrix.sh`), which carries its own config and touches nothing on
+# the host. To build here instead:
+#     cargo pgrx init --pg18 $(which pg_config)
+[package]
+name = "kamu-money-pg"
+version = "0.2.1"
+description = "PostgreSQL extension providing kmoney: one native fixed-size money type per ISO 4217 currency."
+# Package identity and `publish = false` are inherited from the lane root.
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+# No `readme`: the lane has no package README.
+keywords = ["postgres", "postgresql", "pgrx", "money", "extension"]
+categories = ["database", "finance"]
+
+[lib]
+name = "kmoney"         # the SQL-side artifacts are all `kmoney`: kmoney.control, kmoney--*.sql, kmoney.so
+crate-type = ["cdylib"]
+
+[features]
+# The tested support matrix is PostgreSQL 15-18. Add another feature only with a matching
+# `test-pg` gate leg.
+default = ["pg18"]
+pg15 = ["pgrx/pg15", "pgrx-tests/pg15"]
+pg16 = ["pgrx/pg16", "pgrx-tests/pg16"]
+pg17 = ["pgrx/pg17", "pgrx-tests/pg17"]
+pg18 = ["pgrx/pg18", "pgrx-tests/pg18"]
+pg_test = ["dep:tempfile"]
+# Adds benchmark-only no-op functions; excluded from the shipped SQL surface.
+boundary-probe = []
+pg_bench = ["dep:pgrx-bench"]
+# YugabyteDB 2025.2.x is based on PostgreSQL 15. Combine this with `pg15`; a
+# future rebase receives a separate, base-major-specific feature.
+yb-pg15 = ["pgrx/yb-pg15"]
+
+[dependencies]
+pgrx = "=0.19.2"
+# The adapter is thin over one codec. Every currency lookup and every digit of the text
+# form comes from here, so the database and the Rust program cannot disagree about what a
+# stored value means.
+#
+# Every build uses the registry version selected by Cargo.lock.
+kamu-money-core = "0.2"
+tempfile = { version = "3", optional = true }
+
+[build-dependencies]
+# The per-currency manifest is DERIVED from this register rather than kept as a
+# second list, so the `Iso4217` enum, the currency markers and the SQL types
+# cannot disagree about a code, an exponent or a name. Drift is not detected
+# here; it is unrepresentable.
+kamu-money-core = "0.2"
+
+[dependencies.pgrx-bench]
+version = "=0.19.2"
+optional = true
+
+[dev-dependencies]
+tempfile = "3"
+
+[dev-dependencies.pgrx-tests]
+version = "=0.19.2"

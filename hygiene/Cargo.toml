@@ -1,0 +1,26 @@
+# Pgrx-free repository guards. Keeping these tests outside `kamu-money-pg`
+# avoids requiring `cargo pgrx init` for the offline gate.
+[package]
+name = "kamu-money-pg-hygiene"
+version = "0.1.0"
+description = "Pgrx-free repository guards and safe-payload tests for the kamu-money-pg lane."
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+# Cargo integration tests need a library target; the library itself stays empty.
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+
+[dev-dependencies]
+cargo_metadata = "0.23"
+kamu-money-core = "0.2"
+serde_json = "1"
+syn = { version = "3", features = ["full", "visit"] }
+toml = "1"
+yaml_serde = "0.10.6"

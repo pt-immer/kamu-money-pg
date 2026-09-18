@@ -1,0 +1,88 @@
+name: On Main Pushed
+
+# A merge normally lands the tree its pull request already certified; the administrative
+# override and a direct push do not. This checks that certificate rather than recompiling, and
+# is the workflow the CI badges read -- a pull_request run is never attributed to this branch.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verified:
+    name: main carries a certified tree
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      checks: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Assert the landing tree was certified
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+          REF: ${{ github.ref }}
+          REPOSITORY: ${{ github.repository }}
+          REQUIRED_CHECK: ci-success
+        run: |
+          set -euo pipefail
+
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "::error::this workflow asserts what main carries; $REF is not main"
+            exit 1
+          fi
+
+          landed_tree="$(git rev-parse "${SHA}^{tree}")"
+          echo "landed commit $SHA carries tree $landed_tree"
+
+          if ! response="$(gh api "repos/${REPOSITORY}/commits/${SHA}/pulls")"; then
+            echo "::error::could not read the pull requests behind $SHA; this run proved nothing"
+            exit 1
+          fi
+          pulls="$(printf '%s' "$response" | jq -r '.[] | select(.merged_at != null) | .number')"
+          if [ -z "$pulls" ]; then
+            echo "::error::$SHA is on main with no merged pull request behind it; nothing certified it"
+            exit 1
+          fi
+
+          # A squash rewrites the commit and preserves the tree, so the tree is the comparison.
+          for number in $pulls; do
+            if ! head_sha="$(gh api "repos/${REPOSITORY}/pulls/${number}" --jq '.head.sha')"; then
+              echo "::error::could not read pull request #${number}; this run proved nothing"
+              exit 1
+            fi
+            if ! git fetch --quiet --no-tags --depth 1 origin "$head_sha"; then
+              echo "::error::could not fetch #${number} head $head_sha; its tree was never read"
+              exit 1
+            fi
+            head_tree="$(git rev-parse "${head_sha}^{tree}")"
+            if [ "$head_tree" != "$landed_tree" ]; then
+              echo "pull request #${number} head $head_sha carries a different tree; not the certificate"
+              continue
+            fi
+
+            # Filtered server-side: one unfiltered page carries 30 of this repository's 42
+            # check runs. A re-run repeats the name, and the latest attempt is the verdict.
+            if ! runs="$(gh api \
+              "repos/${REPOSITORY}/commits/${head_sha}/check-runs?check_name=${REQUIRED_CHECK}")"; then
+              echo "::error::could not read ${REQUIRED_CHECK} on $head_sha; this run proved nothing"
+              exit 1
+            fi
+            conclusion="$(printf '%s' "$runs" \
+              | jq -r '[.check_runs[]] | sort_by(.started_at) | (last // {}) | .conclusion // "absent"')"
+            if [ "$conclusion" = "success" ]; then
+              echo "pull request #${number} certified this exact tree: ${REQUIRED_CHECK} was ${conclusion}"
+              exit 0
+            fi
+            echo "pull request #${number} carries this tree but ${REQUIRED_CHECK} was '${conclusion}'"
+          done
+
+          echo "::error::no merged pull request certified tree $landed_tree with a green ${REQUIRED_CHECK}; main is carrying unverified content"
+          exit 1

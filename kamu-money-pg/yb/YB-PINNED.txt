@@ -1,0 +1,19 @@
+# The YugabyteDB image identity the 3-symbol pgrx fork was DERIVED AND VALIDATED against.
+#
+# This file is the difference between adopting a new YugabyteDB version as a DECISION and
+# discovering it as an INCIDENT. yb-image.sh compares what a tag resolves to against the digest
+# below and refuses to proceed on a mismatch unless YB_ALLOW_DRIFT=1 is set deliberately.
+#
+# Why a digest and not the tag. A tag is mutable and this repository runs against a shared docker
+# daemon: `yugabytedb/yugabyte:2025.2.5.1-b1` can be repointed at a new build at any time. The
+# native-YB proof is a claim about ONE image -- the artifact is compiled against that image's PG15
+# headers and glibc, then loaded into that image's runtime -- so "it works on YugabyteDB" means
+# nothing without saying which YugabyteDB.
+#
+# TO ADOPT A NEW VERSION, follow kamu-money-pg/yb/RUNBOOK.md. It is four commands, and the point of
+# writing them down is that the answer to "did anyone check the adaptation still fits?" should not be
+# somebody's memory.
+#
+# Format: one `tag<TAB>digest` line. Comments and blank lines ignored.
+
+yugabytedb/yugabyte:2025.2.5.1-b1	yugabytedb/yugabyte@sha256:640d29f15de10a364a5e56165c25d1308dd0d68a3e2a069791bf4c71dbec952b

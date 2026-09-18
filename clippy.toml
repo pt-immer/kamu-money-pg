@@ -1,0 +1,13 @@
+# Clippy configuration for the PostgreSQL extension lane.
+# Clippy searches parent directories, so this file exists to stop the lane
+# inheriting the published workspace's lower MSRV. Clippy prefers this value
+# over `Cargo.toml`'s `rust-version` and reports a disagreement as a warning no
+# `-D warnings` promotes, so `pins.rs` holds the two equal rather than leaving
+# them to be aligned by hand. It is a FLOOR and not the pinned toolchain:
+# `pins.rs` checks only that it does not exceed the channel rustup selects,
+# because deriving it from that channel would leave `clippy::incompatible_msrv`
+# comparing the compiler against itself.
+msrv = "1.96"
+
+# A child clippy.toml replaces rather than merges the parent configuration.
+doc-valid-idents = ["IEEE", "ISO", "MurmurHash3", "MurmurHash3's", "PostgreSQL", "PostgreSQL's", ".."]

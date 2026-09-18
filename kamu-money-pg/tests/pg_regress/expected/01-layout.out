@@ -1,0 +1,18 @@
+-- kmoney_mixed_is_eighteen_bytes_with_no_header
+stored=18 in_memory=18
+-- a_pinned_value_is_sixteen_bytes
+pinned=16 erased=18
+-- the_catalog_says_fixed_length_plain_and_byte_aligned
+kmoney_mixed=18/f/c/p
+kmoney_usd=16/f/c/p
+-- the_size_tradeoff_against_numeric_is_measured_not_assumed
+kmoney_usd_fixed_at_16=true numeric_wins_typical=true numeric_loses_at_top=true
+-- the_size_does_not_depend_on_the_value
+distinct_sizes=1
+-- numeric_silently_rounds_four_e_minus_nineteen_to_zero
+numeric_rounds_4e_minus_19_to_zero=true
+-- every_iso_code_has_a_type
+pinned_type_count=178
+-- no_generated_type_carries_an_operator_class
+inspected=178 opclasses=0
+== CASE COMPLETE: 01-layout ==
