@@ -112,16 +112,19 @@ COPY --chown=pgrx Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY --chown=pgrx .cargo/ .cargo/
 COPY --chown=pgrx kamu-money-pg/Cargo.toml kamu-money-pg/build.rs kamu-money-pg/
 COPY --chown=pgrx hygiene/Cargo.toml hygiene/
+COPY --chown=pgrx tools/artifact/Cargo.toml tools/artifact/
 COPY --chown=pgrx scripts/assert-core-resolution.sh scripts/resolve-core-manifest.sh scripts/
 RUN <<'SETUP' bash -e
-    mkdir -p kamu-money-pg/src hygiene/src
+    mkdir -p kamu-money-pg/src hygiene/src tools/artifact/src
     : > kamu-money-pg/src/lib.rs
     : > hygiene/src/lib.rs
+    : > tools/artifact/src/lib.rs
+    : > tools/artifact/src/main.rs
     # Resolve after the stub targets exist; refuse stale locks before compiling.
     bash scripts/assert-core-resolution.sh
     # `--tests` so the dev-dependencies land here too; `pgrx-tests` is one, and the CMD needs it.
     cargo build --locked -p kamu-money-pg --tests --no-default-features --features "pg${PG_MAJOR}"
-    rm -rf kamu-money-pg/src hygiene/src
+    rm -rf kamu-money-pg/src hygiene/src tools/artifact/src
 SETUP
 
 # --- the real source ------------------------------------------------------------------------

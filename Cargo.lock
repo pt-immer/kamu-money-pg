@@ -840,6 +840,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "kamu-money-pg-artifact"
+version = "0.1.0"
+dependencies = [
+ "sha2",
+ "tempfile",
+]
+
+[[package]]
 name = "kamu-money-pg-hygiene"
 version = "0.1.0"
 dependencies = [

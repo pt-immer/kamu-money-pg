@@ -77,6 +77,20 @@ It proves the extension is correct on YugabyteDB, and stops there. `just test-yb
 transfers and same-version dump/restore — those describe how a cluster carries
 the extension, which is why adopting an image runs both.
 
+The artifact authority accepts exactly one root-level `kmoney.so`, `kmoney.control` and
+version-matched install SQL. Its manifest must contain those three unique canonical names and
+SHA-256 digests, with no omitted, duplicate, extra or path-bearing entry. Verification snapshots
+the three files into owned bytes; release inspection and copied installation consume those bytes
+inside the same helper process, so changing the source directory afterward cannot substitute a
+different artifact. `YB_ART_ALLOW_UNVERIFIED=1` is only a developer fallback when the manifest is
+absent. A present malformed or mismatched manifest always fails, and the release gate refuses the
+fallback before any proof stage.
+
+Installed-node evidence is intentionally narrower until TDKC-43: the current installer compares
+the installed `kmoney.so` digest after a copy or against a baked image manifest. It does not yet
+issue a node-bound receipt proving the installed control and SQL bytes. Treat the verified source
+triplet and that per-node library observation as separate facts.
+
 If the gate passes:
 
 1. replace or add the exact `tag<TAB>digest` row in `YB-PINNED.txt`;
@@ -155,7 +169,8 @@ workspace discovery. Never commit a path patch as the release configuration.
 | `tag is not recorded in the pin file` | No supported digest exists. Follow image adoption with `YB_ALLOW_UNPINNED=1`. |
 | `probe-yb-abi: FAILED` | A header assumption changed. Re-derive the relevant fork adaptation. |
 | Compile error in `pgrx` or `pgrx-pg-sys` | The fork no longer applies to the chosen pgrx/YB combination. Update the fork; do not patch generated source in a container. |
-| `INCOHERENT TRIPLET` or `MANIFEST MISMATCH` | Shared object, control file, and SQL came from different builds. Delete that run's private output and rebuild as one artifact. |
+| Manifest reports omitted, duplicate, unexpected or non-canonical members | The manifest is not the closed three-file schema. Delete that run's private output and rebuild as one artifact; the developer override cannot bypass a present bad manifest. |
+| `INCOHERENT TRIPLET` or `MANIFEST MISMATCH` | Shared object, control file, and SQL came from different builds or changed after manifest creation. Delete that run's private output and rebuild as one artifact. |
 | `could not access file "$libdir/kmoney"` on one node | That node lacks the extension library. Roll the same image to every tserver, including read replicas. |
 | Stock PG15 and YugabyteDB fail the same case | Extension or portable-case defect. Start with `just test-pg 15`. |
 | Stock PG15 passes and YugabyteDB fails | YugabyteDB divergence. Use the named case and golden diff to isolate the contract. |
