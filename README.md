@@ -1,5 +1,23 @@
 # kamu-money-pg
 
+<div align="center">
+
+**Exact ISO 4217 money, native to PostgreSQL and YugabyteDB.**
+
+[![CI][badge-ci]][link-ci]
+[![MSRV][badge-msrv]][link-msrv]
+[![License][badge-license]][link-license]
+
+[![PostgreSQL 15–18][badge-postgres]][link-postgres]
+[![YugabyteDB pinned image][badge-yb]][link-yb]
+
+[SQL and storage contracts](DESIGN.md) ·
+[Development](#development) ·
+[Validation and releases](#validation-and-releases) ·
+[YugabyteDB runbook](kamu-money-pg/yb/RUNBOOK.md)
+
+</div>
+
 PostgreSQL and YugabyteDB extension for exact ISO 4217 money, built with pgrx.
 The SQL extension is `kmoney`; it supplies per-currency types such as
 `kmoney_usd` and the heterogeneous `kmoney_mixed` type.
@@ -49,5 +67,19 @@ See [DESIGN.md](DESIGN.md) for SQL/storage contracts,
 [RUNBOOK.md](kamu-money-pg/yb/RUNBOOK.md) for operational steps,
 and [IMPORT.md](IMPORT.md) for source provenance.
 
+## License
+
 Dual-licensed MIT OR Apache-2.0. See [LICENSE-MIT](LICENSE-MIT) and
 [LICENSE-APACHE](LICENSE-APACHE).
+
+[badge-ci]: https://img.shields.io/github/actions/workflow/status/pt-immer/kamu-money-pg/on-main-pushed.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI
+[badge-msrv]: https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fpt-immer%2Fkamu-money-pg%2Fmain%2F.config%2Fdev-tools.json&query=%24.rust.msrv&label=MSRV&style=for-the-badge&logo=rust&color=black
+[badge-license]: https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue?style=for-the-badge
+[badge-postgres]: https://img.shields.io/badge/PostgreSQL-15%E2%80%9318-4169E1?style=for-the-badge&logo=postgresql&logoColor=white
+[badge-yb]: https://img.shields.io/badge/YugabyteDB-pinned%20image-FF6E42?style=for-the-badge
+
+[link-ci]: https://github.com/pt-immer/kamu-money-pg/actions/workflows/on-main-pushed.yml
+[link-msrv]: Cargo.toml
+[link-license]: #license
+[link-postgres]: DESIGN.md
+[link-yb]: kamu-money-pg/yb/YB-PINNED.txt
