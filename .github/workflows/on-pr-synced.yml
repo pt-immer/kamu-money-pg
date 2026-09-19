@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2
+      - uses: taiki-e/install-action@26e9283f268b880168bdbd2c545dfcd60ec2c6ab # v2
         with:
           tool: just@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['just'].version }},cargo-deny@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['cargo-deny'].version }}
       - run: just deny
@@ -42,7 +42,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable branch, 2026-07-16
         with:
           toolchain: ${{ fromJSON(needs.changes.outputs.manifest).rust.primary }}
-      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2
+      - uses: taiki-e/install-action@26e9283f268b880168bdbd2c545dfcd60ec2c6ab # v2
         with:
           tool: just@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['just'].version }},cargo-nextest@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['cargo-nextest'].version }}
       - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
@@ -63,7 +63,7 @@ jobs:
         with:
           toolchain: nightly
           components: miri
-      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2
+      - uses: taiki-e/install-action@26e9283f268b880168bdbd2c545dfcd60ec2c6ab # v2
         with:
           tool: just@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['just'].version }}
       - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
@@ -86,7 +86,7 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2
+      - uses: taiki-e/install-action@26e9283f268b880168bdbd2c545dfcd60ec2c6ab # v2
         with:
           tool: just@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['just'].version }}
       - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
@@ -108,7 +108,7 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2
+      - uses: taiki-e/install-action@26e9283f268b880168bdbd2c545dfcd60ec2c6ab # v2
         with:
           tool: just@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['just'].version }},cargo-nextest@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['cargo-nextest'].version }}
       - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
@@ -131,7 +131,7 @@ jobs:
         pg: [15, 16, 17, 18]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2
+      - uses: taiki-e/install-action@26e9283f268b880168bdbd2c545dfcd60ec2c6ab # v2
         with:
           tool: just@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['just'].version }}
       # The PG matrix runs in parallel; retain local dependency layers without CI export.
@@ -144,7 +144,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2
+      - uses: taiki-e/install-action@26e9283f268b880168bdbd2c545dfcd60ec2c6ab # v2
         with:
           tool: just@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['just'].version }}
       # Exporting a build cache needs the docker-container driver; the default one cannot.
@@ -184,7 +184,7 @@ jobs:
         with:
           toolchain: ${{ fromJSON(needs.changes.outputs.manifest).rust.primary }}
           components: rustfmt
-      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2
+      - uses: taiki-e/install-action@26e9283f268b880168bdbd2c545dfcd60ec2c6ab # v2
         with:
           tool: just@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['just'].version }},taplo-cli@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['taplo-cli'].version }},typos-cli@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['typos-cli'].version }},shellcheck@${{ fromJSON(needs.changes.outputs.manifest).system_tools.shellcheck.version }}
       - run: npm ci
@@ -199,7 +199,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable branch, 2026-07-16
         with:
           toolchain: ${{ fromJSON(needs.changes.outputs.manifest).rust.primary }}
-      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2
+      - uses: taiki-e/install-action@26e9283f268b880168bdbd2c545dfcd60ec2c6ab # v2
         with:
           tool: just@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['just'].version }},cargo-nextest@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['cargo-nextest'].version }}
       - run: just test-yb
