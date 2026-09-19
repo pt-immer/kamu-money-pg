@@ -148,7 +148,7 @@ jobs:
         with:
           tool: just@${{ fromJSON(needs.changes.outputs.manifest).cargo_tools['just'].version }}
       # Exporting a build cache needs the docker-container driver; the default one cannot.
-      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       # Cache inputs match the files copied before the dependency compile.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
