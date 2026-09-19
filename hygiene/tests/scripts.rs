@@ -246,7 +246,7 @@ fn empty_recipe_parameters_cannot_shift_later_arguments() {
 fn shared_scratch_scripts_take_the_workspace_lock() {
     let root = support::lane_root();
     let scripts = support::tracked_files(Some("*.sh"));
-    let sourced_libraries = ["artifact.sh", "cluster.sh", "install.sh"];
+    let sourced_libraries = ["cluster.sh", "install.sh"];
     let mut seen_libraries = Vec::new();
     let mut offenders = Vec::new();
 

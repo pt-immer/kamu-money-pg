@@ -64,7 +64,7 @@ fn release_gate_covers_one_immutable_deployable_artifact() {
         "node-image.sh",
         "YB_REQUIRE_BAKED=1",
         "run-yb-regress.sh",
-        "rs_noop",
+        "artifact.sh release-check",
     ] {
         assert!(release.contains(required), "gate-pg-release must execute {required}");
     }

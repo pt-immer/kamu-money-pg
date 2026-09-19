@@ -25,15 +25,17 @@
 #
 # `set -euo pipefail` is deliberately NOT set here: sourced into scripts that already set it.
 
-# The extension triplet is resolved by ONE function, by exact name, against a manifest.
-# shellcheck source=kamu-money-pg/yb/artifact.sh
-source "$(dirname "${BASH_SOURCE[0]}")/artifact.sh"
+# Artifact verification and byte-consuming copies stay in one Rust process. The adapter returns
+# only a completed-operation receipt; it never exports verified paths for this shell to reopen.
+YB_ARTIFACT_HELPER="$(dirname "${BASH_SOURCE[0]}")/artifact.sh"
 
 YB_LIB=/home/yugabyte/postgres/lib/kmoney.so
 YB_EXTDIR=/home/yugabyte/postgres/share/extension
 # The manifest the node image carries, renamed on the way in so it cannot collide with an
 # extension file. It is the image's own statement about what it holds.
 YB_IMAGE_MANIFEST="$YB_EXTDIR/kmoney-ARTIFACT-MANIFEST.txt"
+# Fixed interchange name produced by the Dockerfile and consumed by the Rust closed-schema parser.
+YB_ART_MANIFEST_NAME="ARTIFACT-MANIFEST.txt"
 
 # "baked" or "copied", set by yb_ensure_extension. Release evidence records which.
 # shellcheck disable=SC2034 # set here for the SOURCING script
@@ -43,6 +45,11 @@ YB_INSTALL_MODE=""
 # shellcheck disable=SC2034 # ditto
 YB_INSTALL_SHA=""
 
+# "verified" or "unverified", set only after a copied operation completes. Baked installation
+# evidence remains partial until TDKC-43 verifies the complete installed triplet per node.
+# shellcheck disable=SC2034 # read by sourcing scripts for reporting
+YB_INSTALL_EVIDENCE=""
+
 # Ensure ONE container carries the extension, and verify it by hash.
 #
 # The expected hash for a baked image comes from the manifest INSIDE the image, never from the
@@ -51,10 +58,16 @@ YB_INSTALL_SHA=""
 # it has no business making, and would fail for a reason that has nothing to do with the node.
 yb_ensure_extension() {
     local node="$1" art="${2:-${KMONEY_RUN_ROOT:-kamu-money-pg/yb/out}}"
-    local want got
+    local want got install_mode evidence
+
+    # A failed later node must not leave the previous node's completed receipt visible.
+    YB_INSTALL_MODE=""
+    YB_INSTALL_SHA=""
+    YB_INSTALL_EVIDENCE=""
 
     if docker exec "$node" test -f "$YB_LIB" 2>/dev/null; then
-        YB_INSTALL_MODE="baked"
+        install_mode="baked"
+        evidence="partial"
         want="$(docker exec "$node" awk '$2 == "kmoney.so" { print $1 }' \
             "$YB_IMAGE_MANIFEST" 2>/dev/null || true)"
         if [ -z "$want" ]; then
@@ -73,22 +86,35 @@ yb_ensure_extension() {
         echo "install: build it with 'just yb-node-image' and boot the suite from that image." >&2
         return 1
     else
-        YB_INSTALL_MODE="copied"
-        yb_resolve_artifacts "$art" || return 2
-        docker cp "$YB_ART_SO"  "$node:$YB_LIB"
-        docker cp "$YB_ART_CTL" "$node:$YB_EXTDIR/kmoney.control"
-        docker cp "$YB_ART_SQL" "$node:$YB_EXTDIR/$(basename "$YB_ART_SQL")"
-        want="$(sha256sum "$YB_ART_SO" | cut -d' ' -f1)"
+        install_mode="copied"
+        local operation="copy-to-node" receipt copied version extra
+        [ "${YB_ART_ALLOW_UNVERIFIED:-0}" = "1" ] && operation="copy-to-node-dev"
+        receipt="$("$YB_ARTIFACT_HELPER" "$operation" "$art" "$node")" || return 2
+        IFS=$'\t' read -r copied evidence version want extra <<< "$receipt"
+        if [ "$copied" != "copied" ] ||
+           { [ "$evidence" != "verified" ] && [ "$evidence" != "unverified" ]; } ||
+           [ -z "$version" ] || [ -z "$want" ] || [ -n "${extra:-}" ]; then
+            echo "install: artifact helper returned an invalid copy receipt" >&2
+            return 2
+        fi
+        if [ "$evidence" = "unverified" ]; then
+            echo "install: *** UNVERIFIED DEVELOPER COPY of kmoney $version; not release evidence ***" >&2
+        fi
     fi
 
     got="$(docker exec "$node" sha256sum "$YB_LIB" 2>/dev/null | cut -d' ' -f1 || true)"
     if [ "$got" != "$want" ]; then
-        echo "install: $node carries the WRONG kmoney.so ($YB_INSTALL_MODE)" >&2
+        echo "install: $node carries the WRONG kmoney.so ($install_mode)" >&2
         echo "install:   on the node $got" >&2
         echo "install:   expected    $want" >&2
         return 1
     fi
-    # shellcheck disable=SC2034 # read by the SOURCING script (release evidence, cross-node compare)
+    # These globals are receipts read by the sourcing harnesses after this function returns.
+    # shellcheck disable=SC2034
+    YB_INSTALL_MODE="$install_mode"
+    # shellcheck disable=SC2034
+    YB_INSTALL_EVIDENCE="$evidence"
+    # shellcheck disable=SC2034
     YB_INSTALL_SHA="$got"
 }
 
@@ -96,11 +122,9 @@ yb_ensure_extension() {
 # bytes from a node that still has them.
 #
 # FROM A DONOR NODE, NOT FROM THE HOST'S out/. The negative control's job is to leave the cluster
-# exactly as it found it, and under a baked image the host may hold no artifact at all -- the old
-# `docker cp "$YB_ART_SO"` restore only worked because every run happened to be a copied one. A
-# donor is always available for the same reason the control is meaningful: the OTHER nodes still
-# have the library. It is also the stronger restore, because it puts back the bytes this cluster
-# was actually running rather than whatever is in a directory on the host.
+# exactly as it found it, and under a baked image the host may hold no artifact at all. A donor is
+# always available because the OTHER nodes still have the library, and it restores the bytes this
+# cluster was actually running.
 yb_restore_extension_on() {
     local target="$1" donor="$2" tmp rc=0
     tmp="$(mktemp -d)"

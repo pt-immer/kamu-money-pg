@@ -1,7 +1,7 @@
 # Agent guide — kamu-money-pg
 
-This standalone workspace contains the unpublished `kamu-money-pg` pgrx
-extension and the pgrx-free `hygiene` crate. `CLAUDE.md` and
+This standalone workspace contains the unpublished `kamu-money-pg` pgrx extension, the pgrx-free
+artifact authority under `tools/artifact`, and the pgrx-free `hygiene` crate. `CLAUDE.md` and
 `.github/copilot-instructions.md` are symlinks to this file.
 
 ## Boundaries
@@ -17,6 +17,9 @@ extension and the pgrx-free `hygiene` crate. `CLAUDE.md` and
 - All unsafe syntax belongs in `kamu-money-pg/src/ffi/`. Safe payload and semantic
   code lives in `src/safe/`; Miri covers payloads and live tests prove the ABI.
 - Persisted hashes use `kamu_money_core::advanced::stable_hash`.
+- `tools/artifact` is the pgrx-free authority for the closed extension triplet. Verified products
+  own the exact library, control and SQL bytes; release checks and copied installs consume those
+  products without exporting verified filesystem paths or boolean proof flags.
 - Preserve SQL names, SQLSTATEs and byte layouts. They are migration-sensitive
   public interfaces. The workspace remains `publish = false`.
 

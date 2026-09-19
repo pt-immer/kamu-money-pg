@@ -25,8 +25,7 @@ source ./kamu-money-pg/yb/node-limits.sh
 YB_IMAGE="${1:-$(./kamu-money-pg/yb/yb-image.sh)}"
 ART="${2:-${KMONEY_RUN_ROOT:-kamu-money-pg/yb/out}}"
 
-# Baked or copied, verified by hash either way -- see install.sh, which sources artifact.sh for the
-# coherent-triplet-by-exact-name rule.
+# Baked or copied through install.sh; copied bytes stay inside the Rust verifier through staging.
 # shellcheck source=kamu-money-pg/yb/install.sh
 source ./kamu-money-pg/yb/install.sh
 

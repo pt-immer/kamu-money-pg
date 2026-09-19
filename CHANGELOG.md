@@ -7,6 +7,7 @@
 - Own extension tooling, policy checks, CI, builder images and releases here.
 - Bound correctness-harness memory and fail source scans on unreadable inputs.
 - Replace yanked chacha20 and vulnerable smol-toml in the locked tooling graphs.
+- Require complete, closed-manifest verification before release checks or artifact copies.
 
 ## 0.2.0
 

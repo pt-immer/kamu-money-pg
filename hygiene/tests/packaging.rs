@@ -412,7 +412,10 @@ fn boundary_probe_cannot_enter_a_deployable_artifact() {
     );
 
     let release = support::recipe_body(&support::just_dump(&root), "gate-pg-release");
-    assert!(release.contains("rs_noop"), "release proof must inspect shipped bytes for benchmark symbols");
+    assert!(
+        release.contains("artifact.sh release-check"),
+        "release proof must invoke the typed artifact check"
+    );
 }
 
 #[test]

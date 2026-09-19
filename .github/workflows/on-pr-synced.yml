@@ -166,7 +166,8 @@ jobs:
             'kamu-money-pg/yb/YB-PINNED.txt',
             'scripts/assert-core-resolution.sh',
             'scripts/resolve-core-manifest.sh',
-            'hygiene/Cargo.toml') }}
+            'hygiene/Cargo.toml',
+            'tools/artifact/Cargo.toml') }}
           restore-keys: |
             buildx-money-pg-yb-
       - run: just test-yb-regress

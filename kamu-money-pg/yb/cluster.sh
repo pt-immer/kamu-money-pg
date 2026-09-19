@@ -194,9 +194,8 @@ yb_cluster_up() {
 # is run separately, once, by the caller: the point of the cluster probes is that ONE DDL
 # statement has to reach all of them while the shared library does not travel with it.
 #
-# The baked-versus-copied decision, the manifest lookup and the hash comparison all live in
-# `yb_ensure_extension` (install.sh), because the single-node harnesses need exactly the same
-# rules and a second copy of them would drift. This function is the LOOP and the reporting.
+# The baked-versus-copied decision and installed-library comparison live in `yb_ensure_extension`
+# (install.sh); its copied path delegates closed membership and byte staging to the Rust helper.
 #
 # PER NODE, not once: "the DDL propagates, the shared library does not" is the failure this whole
 # file exists to surface, and a copy loop that reports success because `docker cp` exited 0 is not

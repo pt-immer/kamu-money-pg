@@ -27,9 +27,8 @@ ART="${2:-$RUN_ROOT}"
 OUT="${3:-$RUN_ROOT/out-yb.txt}"
 SQLFILE="${4:-kamu-money-pg/yb/abi_battery.sql}"
 
-# Baked or copied, verified by hash either way -- one implementation, shared with the cluster
-# harnesses. install.sh sources artifact.sh, which resolves the triplet by exact name against the
-# build's manifest.
+# Baked or copied through one installer shared with the cluster harnesses. Copied bytes are owned,
+# verified and staged by the Rust artifact helper in one operation.
 # shellcheck source=kamu-money-pg/yb/install.sh
 source ./kamu-money-pg/yb/install.sh
 

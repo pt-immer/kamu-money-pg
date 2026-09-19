@@ -85,6 +85,7 @@ COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY .cargo/ .cargo/
 COPY kamu-money-pg/Cargo.toml kamu-money-pg/build.rs kamu-money-pg/
 COPY hygiene/Cargo.toml hygiene/
+COPY tools/artifact/Cargo.toml tools/artifact/
 COPY scripts/assert-core-resolution.sh scripts/resolve-core-manifest.sh scripts/
 
 # The release proof's empty-cache guarantee, and the reason this ARG is EXPANDED in the RUN below
@@ -96,14 +97,16 @@ COPY scripts/assert-core-resolution.sh scripts/resolve-core-manifest.sh scripts/
 # which is why `hygiene/tests/packaging.rs` asserts the reference below, not just the declaration.
 ARG KMONEY_CACHE_ID=shared
 RUN <<'SETUP' bash -e
-    mkdir -p kamu-money-pg/src hygiene/src
+    mkdir -p kamu-money-pg/src hygiene/src tools/artifact/src
     : > kamu-money-pg/src/lib.rs
     : > hygiene/src/lib.rs
+    : > tools/artifact/src/lib.rs
+    : > tools/artifact/src/main.rs
     # Resolve after the stub targets exist; refuse stale locks before compiling.
     bash scripts/assert-core-resolution.sh
     echo "dependency scope: ${KMONEY_CACHE_ID}"
     cargo build --release --locked -p kamu-money-pg --no-default-features --features "pg15,yb-pg15"
-    rm -rf kamu-money-pg/src hygiene/src
+    rm -rf kamu-money-pg/src hygiene/src tools/artifact/src
 SETUP
 
 # =================================================================================================
@@ -146,9 +149,8 @@ RUN ./scripts/pgrx.sh package -p kamu-money-pg \
 # hygiene/tests/exactly_one.rs falsify it -- an assertion that only ever runs inside a
 # Docker build has no negative control short of a build argument invented to break it.
 #
-# ARTIFACT-MANIFEST.txt is `sha256sum`'s own format, so kamu-money-pg/yb/artifact.sh verifies it
-# with `sha256sum -c` rather than a hand-rolled comparison -- which is what makes a stale file
-# left in the output directory a failure instead of a coin flip.
+# ARTIFACT-MANIFEST.txt is canonical GNU text format. The Rust artifact authority requires exactly
+# this library, control file and install SQL before it issues verification evidence.
 RUN set -eux; mkdir -p /out; \
     chmod +x kamu-money-pg/yb/exactly-one.sh; \
     one() { ./kamu-money-pg/yb/exactly-one.sh target "$1"; }; \

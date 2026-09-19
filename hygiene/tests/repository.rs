@@ -114,6 +114,34 @@ fn dependency_cache_key_covers_every_dependency_layer_script() {
 }
 
 #[test]
+fn yugabyte_dependency_cache_covers_every_copied_workspace_manifest() {
+    let lane = lane_root();
+    let workflow = yaml(".github/workflows/on-pr-synced.yml");
+    let cache_key = workflow["jobs"]["test-money-pg-yb"]["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|step| step["uses"].as_str().is_some_and(|uses| uses.starts_with("actions/cache@")))
+        .and_then(|step| step["with"]["key"].as_str())
+        .expect("YugabyteDB job must declare its BuildKit cache key");
+    let docker = read(lane_root().join("kamu-money-pg/yb/Dockerfile"));
+    let mut manifests = vec!["Cargo.toml".to_owned()];
+    manifests.extend(support::metadata().workspace_packages().iter().map(|package| {
+        package
+            .manifest_path
+            .as_std_path()
+            .strip_prefix(&lane)
+            .expect("workspace package must live under the lane root")
+            .to_string_lossy()
+            .into_owned()
+    }));
+    for manifest in manifests {
+        assert!(docker.lines().any(|line| line.starts_with("COPY ") && line.contains(&manifest)));
+        assert!(cache_key.contains(&format!("'{manifest}'")), "cache key must include {manifest}");
+    }
+}
+
+#[test]
 fn source_policy_refuses_unstable_hash_construction() {
     use syn::visit::Visit;
     #[derive(Default)]

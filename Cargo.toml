@@ -1,7 +1,7 @@
 [workspace]
 # `hygiene` is the pgrx-free crate holding repository guards and the safe payload harness.
 # Keeping it separate avoids compiling pgrx for policy tests.
-members = ["kamu-money-pg", "hygiene"]
+members = ["kamu-money-pg", "hygiene", "tools/artifact"]
 # A local pgrx checkout is its own workspace.
 exclude = ["vendor"]
 resolver = "3"

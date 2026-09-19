@@ -242,6 +242,7 @@ fmt-check:
 [doc("Clippy the extension at the pedantry its crate root denies, pinned to one PG major.")]
 lint:
     cargo clippy --locked -p kamu-money-pg --no-default-features --features pg18 --all-targets -- -D warnings
+    cargo clippy --locked -p kamu-money-pg-artifact --all-targets -- -D warnings
 
 [doc("Audit the lane lockfile, allowing only the pinned public pgrx fork.")]
 deny:
@@ -271,8 +272,8 @@ schema-hash pg="18" expect="" features="":
 
 [doc("Run pgrx-free repository guards and safe-payload tests.")]
 test-hygiene:
-    cargo nextest run --locked -p kamu-money-pg-hygiene
-    cargo test --locked -p kamu-money-pg-hygiene --doc
+    cargo nextest run --locked -p kamu-money-pg-hygiene -p kamu-money-pg-artifact
+    cargo test --locked -p kamu-money-pg-hygiene -p kamu-money-pg-artifact --doc
 
 [doc("Run Miri over the exact pgrx-free payload codec.")]
 miri-payload:
@@ -613,6 +614,12 @@ gate-pg-release tag="":
     source ./kamu-money-pg/yb/workspace-lock.sh
     workspace_lock "gate-pg-release" || exit 1
 
+    if [ "${YB_ART_ALLOW_UNVERIFIED:-0}" != "0" ]; then
+        echo "gate-pg-release: YB_ART_ALLOW_UNVERIFIED is a developer-only downgrade." >&2
+        echo "gate-pg-release: unset it before any release-proof stage can run." >&2
+        exit 2
+    fi
+
     # Release proof resolves `kamu-money-core` from its version requirement.
     # A unique cache scope is an EMPTY BuildKit cache: the release artifact is
     # compiled from scratch, never assembled from a shared incremental cache.
@@ -629,21 +636,7 @@ gate-pg-release tag="":
     source ./kamu-money-pg/yb/install.sh
     RUN_ROOT="${KMONEY_RUN_ROOT:-kamu-money-pg/yb/out}"
     yb_extract_artifact_from_image "$NODE_IMAGE" "$RUN_ROOT"
-    yb_resolve_artifacts "$RUN_ROOT"
-
-    # Inspect shipped bytes, not build configuration, for benchmark-only symbols.
-    for sym in rs_noop rs_noop_kmoney; do
-        if grep -qi "$sym" "$YB_ART_SQL"; then
-            echo "gate-pg-release: REFUSING -- the shipped install SQL declares '$sym'." >&2
-            echo "gate-pg-release: that is boundary-probe scaffolding and must never be in a" >&2
-            echo "gate-pg-release: deployable node image. Rebuild without EXTRA_FEATURES." >&2
-            exit 1
-        fi
-        if nm -D --defined-only "$YB_ART_SO" 2>/dev/null | grep -qi "$sym"; then
-            echo "gate-pg-release: REFUSING -- the shipped kmoney.so exports '$sym'." >&2
-            exit 1
-        fi
-    done
+    ./kamu-money-pg/yb/artifact.sh release-check "$RUN_ROOT"
     echo "gate-pg-release: the shipped artifact carries no benchmark scaffolding"
 
     echo "gate-pg-release: base image $YB_REF"
